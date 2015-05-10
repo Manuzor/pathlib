@@ -1,0 +1,24 @@
+{
+  "name": "pathlib",
+  "description": "Object oriented path manipulation.",
+  "license": "MIT",
+  "copyright": "Copyright © 2015, manuzor",
+  "authors": ["manuzor"],
+
+  "targetPath": "output",
+  "targetType": "library",
+
+  "sourcePaths": ["code"],
+  "importPaths": ["code"],
+
+  "dependencies": {},
+
+  "configurations": [
+    {
+      "name": "lib",
+      "buildType": "debug",
+      "targetName": "pathlib",
+      "targetPath": "output/lib"
+    }
+  ]
+}
