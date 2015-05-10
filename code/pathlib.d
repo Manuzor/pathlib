@@ -28,7 +28,7 @@ debug
 
 
 /// Returns: The path string using forward slashes, regardless of the current platform.
-auto asPosix(P)(P p) {
+auto asPosix(PathType)(PathType p) {
   auto root = p.root;
   auto result = p.data[root.length..$].replace("\\", "/").squeeze("/");
   if (result.length > 1 && result[$ - 1] == '/')
@@ -51,11 +51,20 @@ unittest {
 
 
 // Returns: The root of the path $(D p).
-string root(P)(P p) {
+string root(PathType)(PathType p) {
   auto data = p.data;
 
-  if (data.length > 1 && data[1] == ':') {
-    return data[0..2];
+  static if(is(P == WindowsPath))
+  {
+    if (data.length > 1 && data[1] == ':') {
+      return data[0..2];
+    }
+  }
+  else // Assume posix
+  {
+    if (data.length > 0 && data[0] == '/') {
+      return data[0..1];
+    }
   }
 
   return "";
@@ -63,19 +72,32 @@ string root(P)(P p) {
 
 ///
 unittest {
+  assert(WindowsPath("").root == "");
+  assert(PosixPath("").root == "");
+  assert(WindowsPath("C:/Hello/World").root == "C:");
+  assert(WindowsPath("/Hello/World").root == "");
+  assert(PosixPath("/Hello/World").root == "/");
+  assert(PosixPath("C:/Hello/World").root == "");
 }
 
 
-string drive(P)(P p) {
+string drive(PathType)(PathType p) {
   return std.path.driveName(p.data);
 }
 
 ///
 unittest {
+  assert(WindowsPath("").drive == "");
+  assert(WindowsPath("/Hello/World").drive == "");
+  assert(WindowsPath("C:/Hello/World").drive == "C:");
+  assert(PosixPath("").drive == "");
+  assert(PosixPath("/Hello/World").drive == "");
+  assert(PosixPath("C:/Hello/World").drive == "");
 }
 
+
 /// Whether the path exists or not. It does not matter whether it is a file or not.
-auto exists(P)(P p) {
+auto exists(PathType)(PathType p) {
   return std.file.exists(p.data);
 }
 
@@ -83,8 +105,9 @@ auto exists(P)(P p) {
 unittest {
 }
 
+
 /// Whether the path is an existing directory.
-auto isDir(P)(P p) {
+auto isDir(PathType)(PathType p) {
   return p.exists && std.file.isDir(p.data);
 }
 
@@ -94,7 +117,7 @@ unittest {
 
 
 /// Whether the path is an existing file.
-auto isFile(P)(P p) {
+auto isFile(PathType)(PathType p) {
   return p.exists && std.file.isFile(p.data);
 }
 
@@ -104,14 +127,14 @@ unittest {
 
 
 /// Whether the path is absolute.
-bool isAbsolute(P)(P p) {
+bool isAbsolute(PathType)(PathType p) {
   // If the path has a root or a drive, it is absolute.
   return !p.root.empty || !p.drive.empty;
 }
 
 
 // Resolve all ".", "..", and symlinks.
-Path resolve(P)(P p) {
+Path resolve(PathType)(PathType p) {
   return Path(std.path.absolutePath(p.data));
 }
 
@@ -121,7 +144,7 @@ unittest {
 
 
 /// Returns: The parts of the path as a string[].
-auto parts(P)(P p) {
+auto parts(PathType)(PathType p) {
   return std.path.pathSplitter(p.asPosix).array;
 }
 
