@@ -109,6 +109,32 @@ unittest {
 }
 
 
+/// Returns: The path data using backward slashes, regardless of the current platform.
+auto windowsData(PathType)(PathType p) {
+  auto root = p.root;
+  auto result = p.data[root.length..$].replace("/", `\`).squeeze(`\`);
+  if (result.length > 1 && result[$ - 1] == '\\') {
+    result = result[0..$ - 1];
+  }
+  return root ~ result;
+}
+
+///
+unittest {
+  assert(Path().windowsData != "");
+  assert(Path("").windowsData == "", Path("").windowsData);
+  assert(Path("/hello/world").windowsData == `\hello\world`);
+  assert(Path("/\\hello/\\/////world//").windowsData == `\hello\world`, Path("/\\hello/\\/////world//").windowsData);
+  assert(Path(`C:\`).windowsData == `C:\`, Path(`C:\`).windowsData);
+  assert(Path(`C:/`).windowsData == `C:\`, Path(`C:/`).windowsData);
+  assert(Path(`C:\hello\`).windowsData == `C:\hello`);
+  assert(Path(`C:\/\hello\`).windowsData == `C:\hello`);
+  assert(Path(`C:\some windows\/path.exe.doodee`).windowsData == `C:\some windows\path.exe.doodee`);
+  assert(Path(`C:\some windows\/path.exe.doodee\\\`).windowsData == `C:\some windows\path.exe.doodee`);
+  assert(Path(`C:/some windows\/path.exe.doodee\\\`).windowsData == Path(Path(`C:/some windows\/path.exe.doodee\\\`).windowsData).data);
+}
+
+
 /// Whether the path exists or not. It does not matter whether it is a file or not.
 auto exists(PathType)(PathType p) {
   return std.file.exists(p.data);
