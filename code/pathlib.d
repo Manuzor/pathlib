@@ -15,6 +15,7 @@ import std.format   : format;
 import std.string   : split, indexOf, empty, squeeze, stripRight;
 import std.conv     : to;
 import std.typecons : Flag;
+import std.traits   : isSomeString;
 
 
 debug
@@ -28,7 +29,7 @@ debug
 
 
 // Returns: The root of the path $(D p).
-string root(PathType)(PathType p) {
+auto root(PathType)(PathType p) {
   auto data = p.data;
 
   static if(is(PathType == WindowsPath))
@@ -60,7 +61,7 @@ unittest {
 
 /// The drive of the path $(D p).
 /// Note: Non-Windows platforms have no concept of "drives".
-string drive(PathType)(PathType p) {
+auto drive(PathType)(PathType p) {
   static if(is(PathType == WindowsPath))
   {
     auto data = p.data;
@@ -83,8 +84,8 @@ unittest {
 }
 
 
-/// Returns: The path string using forward slashes, regardless of the current platform.
-auto posixString(PathType)(PathType p) {
+/// Returns: The path data using forward slashes, regardless of the current platform.
+auto posixData(PathType)(PathType p) {
   auto root = p.root;
   auto result = p.data[root.length..$].replace("\\", "/").squeeze("/");
   if (result.length > 1 && result[$ - 1] == '/') {
@@ -95,16 +96,16 @@ auto posixString(PathType)(PathType p) {
 
 ///
 unittest {
-  assert(Path().posixString != "");
-  assert(Path("").posixString == "", Path("").posixString);
-  assert(Path("/hello/world").posixString == "/hello/world");
-  assert(Path("/\\hello/\\/////world//").posixString == "/hello/world", Path("/\\hello/\\/////world//").posixString);
-  assert(Path(`C:\`).posixString == "C:/", Path(`C:\`).posixString);
-  assert(Path(`C:\hello\`).posixString == "C:/hello");
-  assert(Path(`C:\/\hello\`).posixString == "C:/hello");
-  assert(Path(`C:\some windows\/path.exe.doodee`).posixString == "C:/some windows/path.exe.doodee");
-  assert(Path(`C:\some windows\/path.exe.doodee\\\`).posixString == "C:/some windows/path.exe.doodee");
-  assert(Path(`C:\some windows\/path.exe.doodee\\\`).posixString == Path(Path(`C:\some windows\/path.exe.doodee\\\`).posixString).data);
+  assert(Path().posixData != "");
+  assert(Path("").posixData == "", Path("").posixData);
+  assert(Path("/hello/world").posixData == "/hello/world");
+  assert(Path("/\\hello/\\/////world//").posixData == "/hello/world", Path("/\\hello/\\/////world//").posixData);
+  assert(Path(`C:\`).posixData == "C:/", Path(`C:\`).posixData);
+  assert(Path(`C:\hello\`).posixData == "C:/hello");
+  assert(Path(`C:\/\hello\`).posixData == "C:/hello");
+  assert(Path(`C:\some windows\/path.exe.doodee`).posixData == "C:/some windows/path.exe.doodee");
+  assert(Path(`C:\some windows\/path.exe.doodee\\\`).posixData == "C:/some windows/path.exe.doodee");
+  assert(Path(`C:\some windows\/path.exe.doodee\\\`).posixData == Path(Path(`C:\some windows\/path.exe.doodee\\\`).posixData).data);
 }
 
 
@@ -155,9 +156,9 @@ unittest {
 }
 
 
-/// Returns: The parts of the path as a string[].
+/// Returns: The parts of the path as an array.
 auto parts(PathType)(PathType p) {
-  return std.path.pathSplitter(p.posixString).array;
+  return std.path.pathSplitter(p.posixData).array;
 }
 
 ///
@@ -169,9 +170,9 @@ unittest {
 }
 
 
-mixin template PathCommon(PathType)
+mixin template PathCommon(PathType, StringType) if (isSomeString!StringType)
 {
-  string data;
+  StringType data;
 
   ///
   unittest {
@@ -182,7 +183,7 @@ mixin template PathCommon(PathType)
 
 
   /// Construct a path from the given string $(D str).
-  static PathType opCall(string str) {
+  static PathType opCall(StringType str) {
     PathType p;
     p.data = str;
     return p;
@@ -212,12 +213,13 @@ mixin template PathCommon(PathType)
 
   ///
   unittest {
-    assert((PathType("C:/hello") / PathType("world.exe.xml")) == PathType("C:/hello/world.exe.xml"), (PathType("C:/hello") / PathType("world.exe.xml")).to!string);
+    assert((PathType("C:/hello") / PathType("world.exe.xml")) == PathType("C:/hello/world.exe.xml"),
+           (PathType("C:/hello") / PathType("world.exe.xml")).to!StringType);
   }
 
 
   /// Concatenate a path and a string, which will be treated as a path.
-  auto opDiv(string str) const {
+  auto opDiv(StringType str) const {
     return this / PathType(str);
   }
 
@@ -228,26 +230,26 @@ mixin template PathCommon(PathType)
 
 
   /// Cast the path to a string.
-  auto toString() const {
-    return this.posixString;
+  auto toString(OtherStringType = StringType)() const {
+    return this.posixData.to!OtherStringType;
   }
 
   ///
   unittest {
-    assert(PathType("C:/hello/world.exe.xml").to!string == "C:/hello/world.exe.xml", PathType("C:/hello/world.exe.xml").to!string);
+    assert(PathType("C:/hello/world.exe.xml").to!StringType == "C:/hello/world.exe.xml", PathType("C:/hello/world.exe.xml").to!StringType);
   }
 }
 
 
 struct WindowsPath
 {
-  mixin PathCommon!WindowsPath;
+  mixin PathCommon!(WindowsPath, string);
 }
 
 
 struct PosixPath
 {
-  mixin PathCommon!PosixPath;
+  mixin PathCommon!(PosixPath, string);
 }
 
 
