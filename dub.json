@@ -18,7 +18,8 @@
       "name": "lib",
       "buildType": "debug",
       "targetName": "pathlib",
-      "targetPath": "output/lib"
+      "targetPath": "output/lib",
+      "buildOptions" : [ "debugInfoC" ]
     }
   ]
 }
