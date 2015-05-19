@@ -10,15 +10,15 @@ module pathlib;
 
 static import std.path;
 static import std.file;
+static import std.uni;
 import std.array      : array, replace, replaceLast, join;
 import std.format     : format;
-import std.string     : split, indexOf, empty, squeeze, stripRight, removechars;
+import std.string     : split, indexOf, empty, squeeze, removechars;
 import std.conv       : to;
 import std.typecons   : Flag;
 import std.traits     : isSomeString, isSomeChar;
-import std.algorithm  : equal, map, reduce, endsWith, stripRight, remove;
-import std.range      : iota, retro, take, isInputRange, repeat;
-import std.functional : binaryFun;
+import std.algorithm  : equal, map, reduce, startsWith, endsWith, strip, stripRight, stripLeft, remove;
+import std.range      : iota, take, isInputRange;
 
 
 debug
@@ -51,6 +51,9 @@ void assertEmpty(A)(A a) {
 bool isDot(StringType)(StringType str)
   if (isSomeString!StringType)
 {
+  if (str.length && str[0] != '.') {
+    return false;
+  }
   auto data = str.removechars("./\\");
   return data.empty;
 }
@@ -62,6 +65,9 @@ unittest {
   assert("./".isDot);
   assert("./.".isDot);
   assert("././".isDot);
+  assert(!"/".isDot);
+  assert(!"hello".isDot);
+  assert(!".git".isDot);
 }
 
 
@@ -170,7 +176,7 @@ unittest {
 
 /// Returns: The path data using backward slashes, regardless of the current platform.
 auto windowsData(PathType)(PathType p) {
-  return p.posixData.replace("/", "\\");
+  return p.posixData.replace("/", `\`);
 }
 
 ///
@@ -186,6 +192,19 @@ unittest {
   assertEqual(Path(`C:\some windows\/path.exe.doodee`).windowsData, `C:\some windows\path.exe.doodee`);
   assertEqual(Path(`C:\some windows\/path.exe.doodee\\\`).windowsData, `C:\some windows\path.exe.doodee`);
   assertEqual(Path(`C:/some windows\/path.exe.doodee\\\`).windowsData, Path(Path(`C:\some windows\/path.exe.doodee\\\`).windowsData).data);
+}
+
+
+/// Will call either posixData or windowsData, according to PathType.
+auto normalizedData(PathType)(PathType p)
+  if(is(PathType == PosixPath) || is(PathType == WindowsPath))
+{
+  static if (is(PathType == PosixPath)) {
+    return p.posixData;
+  }
+  else static if (is(PathType == WindowsPath)) {
+    return p.windowsData;
+  }
 }
 
 
@@ -227,7 +246,7 @@ bool isAbsolute(PathType)(PathType p) {
 
 
 // Resolve all ".", "..", and symlinks.
-Path resolve(PathType)(PathType p) {
+Path resolve(Path p) {
   return Path(std.path.absolutePath(p.data));
 }
 
@@ -238,16 +257,26 @@ unittest {
 
 /// Returns: The parts of the path as an array.
 auto parts(PathType)(PathType p) {
-  return std.path.pathSplitter(p.posixData).array;
+  string[] theParts;
+  auto root = p.root;
+  if (!root.empty) {
+    static if(is(PathType == WindowsPath)) {
+      root ~= p.separator;
+    }
+    theParts ~= root;
+  }
+  theParts ~= p.posixData[root.length .. $].strip('/').split('/')[];
+  return theParts;
 }
 
 ///
 unittest {
-  import std.algorithm : equal;
-
-  assert(Path().parts.equal(["."]));
-  assert(Path("C:/hello/world.exe.xml").parts.equal(["C:/", "hello", "world.exe.xml"]));
-  assert(Path("/hello/world.exe.xml").parts.equal(["/", "hello", "world.exe.xml"]));
+  assertEqual(Path().parts, ["."]);
+  assertEqual(Path("./.").parts, ["."]);
+  assertEqual(WindowsPath("hello/world.exe.xml").parts, ["hello", "world.exe.xml"]);
+  assertEqual(WindowsPath("C:/hello/world.exe.xml").parts, [`C:\`, "hello", "world.exe.xml"]);
+  assertEqual(PosixPath("hello/world.exe.xml").parts, ["hello", "world.exe.xml"]);
+  assertEqual(PosixPath("/hello/world.exe.xml").parts, ["/", "hello", "world.exe.xml"]);
 }
 
 
@@ -260,15 +289,14 @@ auto parents(PathType)(PathType p) {
 ///
 unittest {
   assertEmpty(Path().parents);
-  //assertEqual(WindowsPath("C:/hello/world").parents, [WindowsPath("C:/hello"), WindowsPath("C:/")]);
-  //assertEqual(WindowsPath("C:/hello/world/").parents, [WindowsPath("C:/hello"), WindowsPath("C:/")]);
-  //assertEqual(PosixPath("/hello/world").parents, [PosixPath("/hello"), PosixPath("/")]);
-  //assertEqual(PosixPath("/hello/world/").parents, [PosixPath("/hello"), PosixPath("/")]);
+  assertEqual(WindowsPath("C:/hello/world").parents, [WindowsPath(`C:\hello`), WindowsPath(`C:\`)]);
+  assertEqual(WindowsPath("C:/hello/world/").parents, [WindowsPath(`C:\hello`), WindowsPath(`C:\`)]);
+  assertEqual(PosixPath("/hello/world").parents, [PosixPath("/hello"), PosixPath("/")]);
+  assertEqual(PosixPath("/hello/world/").parents, [PosixPath("/hello"), PosixPath("/")]);
 }
-// +/
 
 
-mixin template PathCommon(PathType, StringType, alias defaultSep)
+mixin template PathCommon(PathType, StringType, alias defaultSep, alias cmpFunc)
   if (isSomeString!StringType && isSomeChar!(typeof(defaultSep)))
 {
   StringType data;
@@ -279,6 +307,9 @@ mixin template PathCommon(PathType, StringType, alias defaultSep)
     assert(PathType("123").data == "123");
     assert(PathType("C:///toomany//slashes!\\").data == "C:///toomany//slashes!\\");
   }
+
+
+  @property auto separator() const { return defaultSep; }
 
 
   /// Construct a path from the given string $(D str).
@@ -305,57 +336,12 @@ mixin template PathCommon(PathType, StringType, alias defaultSep)
   }
 
 
-  void opOpAssign(string op)(PathType other)
-    if (op == "~")
-  {
-    if (PathType(other.data).isDot) {
-      return;
-    }
-    auto data = std.algorithm.stripRight(this.data, defaultSep);
-    if (this.isDot) {
-      data = other.data;
-    }
-    else {
-      data = format("%s%c%s", data, defaultSep, other.data);
-    }
-
-    this.data = data;
-  }
-
-  ///
-  unittest {
-    {
-      auto p = PathType();
-      p ~= "hello";
-      assertEqual(p, PathType("hello"));
-    }
-    {
-      auto p = PathType("");
-      p ~= "hello";
-      assertEqual(p, PathType("hello"));
-    }
-    {
-      auto p = PathType(".");
-      p ~= "hello";
-      assertEqual(p, PathType("hello"));
-    }
-  }
-
-
-  /// Concatenate the path-string $(D str) to this path.
-  void opOpAssign(string op, InStringType)(InStringType str)
+  /// Concatenate a path and a string, which will be treated as a path.
+  auto opBinary(string op, InStringType)(InStringType str) const
     if (op == "~" && isSomeString!InStringType)
   {
-    this ~= PathType(str);
+    return this ~ PathType(str);
   }
-
-  ///
-  unittest {
-    PathType p;
-    p ~= "hello";
-    assert(p == PathType("hello"));
-  }
-
 
   /// Concatenate two paths.
   auto opBinary(string op)(PathType other) const
@@ -366,20 +352,36 @@ mixin template PathCommon(PathType, StringType, alias defaultSep)
     return p;
   }
 
-  ///
-  unittest {
-    assertEqual((PathType("C:/hello") ~ PathType("world.exe.xml")), PathType("C:/hello" ~ defaultSep ~ "world.exe.xml"));
-    assertEqual(PathType() ~ "hello", PathType("hello"));
-    assertEqual(PathType("") ~ "hello", PathType("hello"));
-    assertEqual(PathType(".") ~ "hello", PathType("hello"));
-  }
-
-
-  /// Concatenate a path and a string, which will be treated as a path.
-  auto opBinary(string op, InStringType)(InStringType str) const
+  /// Concatenate the path-string $(D str) to this path.
+  void opOpAssign(string op, InStringType)(InStringType str)
     if (op == "~" && isSomeString!InStringType)
   {
-    return this ~ PathType(str);
+    this ~= PathType(str);
+  }
+
+  /// Concatenate the path $(D other) to this path.
+  void opOpAssign(string op)(PathType other)
+    if (op == "~")
+  {
+    auto l = PathType(this.normalizedData);
+    auto r = PathType(other.normalizedData);
+
+    if (l.isDot || r.isAbsolute) {
+      this.data = r.data;
+      return;
+    }
+
+    if (r.isDot) {
+      this.data = l.data;
+      return;
+    }
+
+    auto sep = "";
+    if (!l.data.endsWith('/', '\\') && !r.data.startsWith('/', '\\')) {
+      sep = [defaultSep];
+    }
+
+    this.data = format("%s%s%s", l.data, sep, r.data);
   }
 
   ///
@@ -387,6 +389,10 @@ mixin template PathCommon(PathType, StringType, alias defaultSep)
     assertEqual(PathType() ~ "hello", PathType("hello"));
     assertEqual(PathType("") ~ "hello", PathType("hello"));
     assertEqual(PathType(".") ~ "hello", PathType("hello"));
+    assertEqual(PosixPath("/") ~ "hello", PosixPath("/hello"));
+    assertEqual(WindowsPath("/") ~ "hello", WindowsPath(`\hello`));
+    assertEqual(PosixPath("/") ~ "hello" ~ "world", PosixPath("/hello/world"));
+    assertEqual(WindowsPath(`C:\`) ~ "hello" ~ "world", WindowsPath(`C:\hello\world`));
   }
 
 
@@ -396,7 +402,7 @@ mixin template PathCommon(PathType, StringType, alias defaultSep)
   {
     auto l = this.data.empty ? "." : this.data;
     auto r = other.data.empty ? "." : other.data;
-    return l == r;
+    return cmpFunc(l, r);
   }
 
   ///
@@ -421,13 +427,13 @@ mixin template PathCommon(PathType, StringType, alias defaultSep)
 
 struct WindowsPath
 {
-  mixin PathCommon!(WindowsPath, string, '\\');
+  mixin PathCommon!(WindowsPath, string, '\\', std.uni.sicmp);
 }
 
 
 struct PosixPath
 {
-  mixin PathCommon!(PosixPath, string, '/');
+  mixin PathCommon!(PosixPath, string, '/', std.algorithm.cmp);
 }
 
 /// Set the default path depending on the current platform.
