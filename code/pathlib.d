@@ -208,50 +208,10 @@ auto normalizedData(PathType)(PathType p)
 }
 
 
-/// Whether the path exists or not. It does not matter whether it is a file or not.
-auto exists(PathType)(PathType p) {
-  return std.file.exists(p.data);
-}
-
-///
-unittest {
-}
-
-
-/// Whether the path is an existing directory.
-auto isDir(PathType)(PathType p) {
-  return p.exists && std.file.isDir(p.data);
-}
-
-///
-unittest {
-}
-
-
-/// Whether the path is an existing file.
-auto isFile(PathType)(PathType p) {
-  return p.exists && std.file.isFile(p.data);
-}
-
-///
-unittest {
-}
-
-
 /// Whether the path is absolute.
 bool isAbsolute(PathType)(PathType p) {
   // If the path has a root or a drive, it is absolute.
   return !p.root.empty || !p.drive.empty;
-}
-
-
-// Resolve all ".", "..", and symlinks.
-Path resolve(Path p) {
-  return Path(std.path.absolutePath(p.data));
-}
-
-///
-unittest {
 }
 
 
@@ -293,6 +253,46 @@ unittest {
   assertEqual(WindowsPath("C:/hello/world/").parents, [WindowsPath(`C:\hello`), WindowsPath(`C:\`)]);
   assertEqual(PosixPath("/hello/world").parents, [PosixPath("/hello"), PosixPath("/")]);
   assertEqual(PosixPath("/hello/world/").parents, [PosixPath("/hello"), PosixPath("/")]);
+}
+
+
+/// Whether the path exists or not. It does not matter whether it is a file or not.
+auto exists(Path p) {
+  return std.file.exists(p.data);
+}
+
+///
+unittest {
+}
+
+
+/// Whether the path is an existing directory.
+auto isDir(Path p) {
+  return p.exists && std.file.isDir(p.data);
+}
+
+///
+unittest {
+}
+
+
+/// Whether the path is an existing file.
+auto isFile(Path p) {
+  return p.exists && std.file.isFile(p.data);
+}
+
+///
+unittest {
+}
+
+
+// Resolve all ".", "..", and symlinks.
+Path resolve(Path p) {
+  return Path(std.path.absolutePath(p.data));
+}
+
+///
+unittest {
 }
 
 
