@@ -277,16 +277,19 @@ unittest {
 }
 
 
-/// The extension of the path.
+/// The extension of the path including the leading dot.
+///
+/// Examples: The extension of "hello.foo.bar.exe" is "exe".
 auto extension(PathType)(PathType p) {
-  import std.algorithm : min;
-
   auto data = p.name;
   auto i = data.lastIndexOf('.');
   if (i < 0) {
     return "";
   }
-  i = min(i + 1, data.length);
+  if (i + 1 == data.length) {
+    // This prevents preserving the dot in empty extensions such as `hello.foo.`.
+    ++i;
+  }
   return data[i .. $];
 }
 
@@ -297,8 +300,8 @@ unittest {
   assertEmpty(Path("/").extension);
   assertEmpty(Path("/hello").extension);
   assertEmpty(Path("C:/hello/world").extension);
-  assertEqual(Path("C:/hello/world.exe").extension, "exe");
-  assertEqual(Path("hello/world.foo.bar.exe").extension, "exe");
+  assertEqual(Path("C:/hello/world.exe").extension, ".exe");
+  assertEqual(Path("hello/world.foo.bar.exe").extension, ".exe");
 }
 
 
@@ -311,7 +314,7 @@ auto extensions(PathType)(PathType p) {
   if (!result.empty) {
     result = result.dropOne;
   }
-  return result.array;
+  return result.map!(a => '.' ~ a).array;
 }
 
 ///
@@ -321,8 +324,36 @@ unittest {
   assertEmpty(Path("/").extensions);
   assertEmpty(Path("/hello").extensions);
   assertEmpty(Path("C:/hello/world").extensions);
-  assertEqual(Path("C:/hello/world.exe").extensions, ["exe"]);
-  assertEqual(Path("hello/world.foo.bar.exe").extensions, ["foo", "bar", "exe"]);
+  assertEqual(Path("C:/hello/world.exe").extensions, [".exe"]);
+  assertEqual(Path("hello/world.foo.bar.exe").extensions, [".foo", ".bar", ".exe"]);
+}
+
+
+/// The full extension of the path.
+///
+/// Examples: The full extension of "hello.foo.bar.exe" would be "foo.bar.exe".
+auto fullExtension(PathType)(PathType p) {
+  auto data = p.name;
+  auto i = data.indexOf('.');
+  if (i < 0) {
+    return "";
+  }
+  if (i + 1 == data.length) {
+    // This prevents preserving the dot in empty extensions such as `hello.foo.`.
+    ++i;
+  }
+  return data[i .. $];
+}
+
+///
+unittest {
+  assertEmpty(Path().fullExtension);
+  assertEmpty(Path("").fullExtension);
+  assertEmpty(Path("/").fullExtension);
+  assertEmpty(Path("/hello").fullExtension);
+  assertEmpty(Path("C:/hello/world").fullExtension);
+  assertEqual(Path("C:/hello/world.exe").fullExtension, ".exe");
+  assertEqual(Path("hello/world.foo.bar.exe").fullExtension, ".foo.bar.exe");
 }
 
 
@@ -369,7 +400,7 @@ unittest {
 mixin template PathCommon(PathType, StringType, alias defaultSep, alias cmpFunc)
   if (isSomeString!StringType && isSomeChar!(typeof(defaultSep)))
 {
-  StringType data;
+  StringType data = ".";
 
   ///
   unittest {
@@ -380,30 +411,6 @@ mixin template PathCommon(PathType, StringType, alias defaultSep, alias cmpFunc)
 
 
   @property auto separator() const { return defaultSep; }
-
-
-  /// Construct a path from the given string $(D str).
-  static PathType opCall(InStringType)(InStringType str) if (isSomeString!InStringType) {
-    PathType p;
-    p.data = cast(StringType)str;
-    return p;
-  }
-
-  ///
-  unittest {
-    static assert(__traits(compiles, PathType("/hello/world")));
-  }
-
-
-  /// Default construct a path, pointing to the current working directory (absolute path).
-  static PathType opCall() {
-    return PathType(".");
-  }
-
-  ///
-  unittest {
-    assert(PathType().data == ".");
-  }
 
 
   /// Concatenate a path and a string, which will be treated as a path.
