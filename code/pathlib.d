@@ -357,6 +357,32 @@ unittest {
 }
 
 
+/// The name of the path without its extension.
+auto stem(PathType)(PathType p) {
+  auto data = p.name;
+  auto i = data.indexOf('.');
+  if (i < 0) {
+    return data;
+  }
+  if (i + 1 == data.length) {
+    // This prevents preserving the dot in empty extensions such as `hello.foo.`.
+    ++i;
+  }
+  return data[0 .. i];
+}
+
+///
+unittest {
+  assertEqual(Path().stem, ".");
+  assertEqual(Path("").stem, ".");
+  assertEqual(Path("/").stem, "");
+  assertEqual(Path("/hello").stem, "hello");
+  assertEqual(Path("C:/hello/world").stem, "world");
+  assertEqual(Path("C:/hello/world.exe").stem, "world");
+  assertEqual(Path("hello/world.foo.bar.exe").stem, "world");
+}
+
+
 /// Whether the path exists or not. It does not matter whether it is a file or not.
 auto exists(Path p) {
   return std.file.exists(p.data);
