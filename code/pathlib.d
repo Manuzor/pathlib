@@ -255,11 +255,13 @@ unittest {
   assertEqual(PosixPath("/hello/world/").parents, [PosixPath("/hello"), PosixPath("/")]);
 }
 
+
+/// The name of the path without any of its parents.
 auto name(PathType)(PathType p) {
-  import std.algorithm : clamp;
+  import std.algorithm : min;
 
   auto data = p.posixData;
-  auto i = clamp(data.lastIndexOf('/') + 1, 0, data.length);
+  auto i = min(data.lastIndexOf('/') + 1, data.length);
   return data[i .. $];
 }
 
@@ -272,6 +274,55 @@ unittest {
   assertEqual(Path("C:\\hello").name, "hello");
   assertEqual(Path("C:/hello/world.exe").name, "world.exe");
   assertEqual(Path("hello/world.foo.bar.exe").name, "world.foo.bar.exe");
+}
+
+
+/// The extension of the path.
+auto extension(PathType)(PathType p) {
+  import std.algorithm : min;
+
+  auto data = p.name;
+  auto i = data.lastIndexOf('.');
+  if (i < 0) {
+    return "";
+  }
+  i = min(i + 1, data.length);
+  return data[i .. $];
+}
+
+///
+unittest {
+  assertEmpty(Path().extension);
+  assertEmpty(Path("").extension);
+  assertEmpty(Path("/").extension);
+  assertEmpty(Path("/hello").extension);
+  assertEmpty(Path("C:/hello/world").extension);
+  assertEqual(Path("C:/hello/world.exe").extension, "exe");
+  assertEqual(Path("hello/world.foo.bar.exe").extension, "exe");
+}
+
+
+/// All extensions of the path.
+auto extensions(PathType)(PathType p) {
+  import std.algorithm : splitter, filter;
+  import std.range : dropOne;
+
+  auto result = p.name.splitter('.').filter!(a => !a.empty);
+  if (!result.empty) {
+    result = result.dropOne;
+  }
+  return result.array;
+}
+
+///
+unittest {
+  assertEmpty(Path().extensions);
+  assertEmpty(Path("").extensions);
+  assertEmpty(Path("/").extensions);
+  assertEmpty(Path("/hello").extensions);
+  assertEmpty(Path("C:/hello/world").extensions);
+  assertEqual(Path("C:/hello/world.exe").extensions, ["exe"]);
+  assertEqual(Path("hello/world.foo.bar.exe").extensions, ["foo", "bar", "exe"]);
 }
 
 
