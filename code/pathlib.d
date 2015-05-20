@@ -13,7 +13,7 @@ static import std.file;
 static import std.uni;
 import std.array      : array, replace, replaceLast, join;
 import std.format     : format;
-import std.string     : split, indexOf, empty, squeeze, removechars;
+import std.string     : split, indexOf, empty, squeeze, removechars, lastIndexOf;
 import std.conv       : to;
 import std.typecons   : Flag;
 import std.traits     : isSomeString, isSomeChar;
@@ -253,6 +253,25 @@ unittest {
   assertEqual(WindowsPath("C:/hello/world/").parents, [WindowsPath(`C:\hello`), WindowsPath(`C:\`)]);
   assertEqual(PosixPath("/hello/world").parents, [PosixPath("/hello"), PosixPath("/")]);
   assertEqual(PosixPath("/hello/world/").parents, [PosixPath("/hello"), PosixPath("/")]);
+}
+
+auto name(PathType)(PathType p) {
+  import std.algorithm : clamp;
+
+  auto data = p.posixData;
+  auto i = clamp(data.lastIndexOf('/') + 1, 0, data.length);
+  return data[i .. $];
+}
+
+///
+unittest {
+  assertEqual(Path().name, ".");
+  assertEqual(Path("").name, ".");
+  assertEmpty(Path("/").name);
+  assertEqual(Path("/hello").name, "hello");
+  assertEqual(Path("C:\\hello").name, "hello");
+  assertEqual(Path("C:/hello/world.exe").name, "world.exe");
+  assertEqual(Path("hello/world.foo.bar.exe").name, "world.foo.bar.exe");
 }
 
 
