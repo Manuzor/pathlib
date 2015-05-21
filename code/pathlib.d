@@ -155,6 +155,9 @@ auto posixData(PathType)(PathType p) {
   if (result.length > 1 && result[$ - 1] == '/') {
     result = result[0..$ - 1];
   }
+  while (result.endsWith("/.")) {
+    result = result[0 .. $ - 2].squeeze("/");
+  }
   return root ~ result;
 }
 
@@ -171,6 +174,9 @@ unittest {
   assertEqual(Path(`C:\some windows\/path.exe.doodee\\\`).posixData, "C:/some windows/path.exe.doodee");
   assertEqual(Path(`C:\some windows\/path.exe.doodee\\\`).posixData, Path(Path(`C:\some windows\/path.exe.doodee\\\`).posixData).data);
   assertEqual((Path(".") ~ "hello" ~ "./" ~ "world").posixData, "hello/world");
+  assertEqual(Path("hello/.").posixData, "hello");
+  assertEqual(Path("hello/././.").posixData, "hello");
+  assertEqual(Path("hello/././/.//").posixData, "hello");
 }
 
 
@@ -205,6 +211,19 @@ auto normalizedData(PathType)(PathType p)
   else static if (is(PathType == WindowsPath)) {
     return p.windowsData;
   }
+}
+
+
+auto asPosixPath(PathType)(PathType p) {
+  return PathType(p.posixData);
+}
+
+auto asWindowsPath(PathType)(PathType p) {
+  return PathType(p.windowsData);
+}
+
+auto asNormalizedPath(PathType)(PathType p) {
+  return PathType(p.normalizedData);
 }
 
 
@@ -437,11 +456,22 @@ unittest {
 
 // Resolve all ".", "..", and symlinks.
 Path resolve(Path p) {
-  return Path(std.path.absolutePath(p.data));
+  return Path(Path(std.path.absolutePath(p.data)).normalizedData);
 }
 
 ///
 unittest {
+}
+
+
+/// The absolute path to the current working directory with symlinks and friends resolved.
+Path cwd() {
+  return Path().resolve();
+}
+
+///
+unittest {
+  assert(!cwd().data.empty);
 }
 
 
