@@ -383,6 +383,28 @@ unittest {
 }
 
 
+/// Whether the given path matches the given glob-style pattern
+bool match(PathType, Pattern)(PathType p, Pattern pattern) {
+  import std.path : globMatch;
+
+  return p.normalizedData.globMatch!(PathType.caseSensitivity)(pattern);
+}
+
+///
+unittest {
+  assert(Path().match("*"));
+  assert(Path("").match("*"));
+  assert(Path(".").match("*"));
+  assert(Path("/").match("*"));
+  assert(Path("/hello").match("*"));
+  assert(Path("/hello/world.exe").match("*"));
+  assert(Path("/hello/world.exe").match("*.exe"));
+  assert(!Path("/hello/world.exe").match("*.zip"));
+  assert(WindowsPath("/hello/world.EXE").match("*.exe"));
+  assert(!PosixPath("/hello/world.EXE").match("*.exe"));
+}
+
+
 /// Whether the path exists or not. It does not matter whether it is a file or not.
 auto exists(Path p) {
   return std.file.exists(p.data);
@@ -423,8 +445,8 @@ unittest {
 }
 
 
-mixin template PathCommon(PathType, StringType, alias defaultSep, alias cmpFunc)
-  if (isSomeString!StringType && isSomeChar!(typeof(defaultSep)))
+mixin template PathCommon(PathType, StringType, alias theSeparator, alias theCaseSensitivity)
+  if (isSomeString!StringType && isSomeChar!(typeof(theSeparator)))
 {
   StringType data = ".";
 
@@ -436,7 +458,11 @@ mixin template PathCommon(PathType, StringType, alias defaultSep, alias cmpFunc)
   }
 
 
-  @property auto separator() const { return defaultSep; }
+  /// Used to separate each path segment.
+  alias separator = theSeparator;
+
+  /// A value of std.path.CaseSensetive whether this type of path is case sensetive or not.
+  alias caseSensitivity = theCaseSensitivity;
 
 
   /// Concatenate a path and a string, which will be treated as a path.
@@ -481,7 +507,7 @@ mixin template PathCommon(PathType, StringType, alias defaultSep, alias cmpFunc)
 
     auto sep = "";
     if (!l.data.endsWith('/', '\\') && !r.data.startsWith('/', '\\')) {
-      sep = [defaultSep];
+      sep = [separator];
     }
 
     this.data = format("%s%s%s", l.data, sep, r.data);
@@ -505,7 +531,12 @@ mixin template PathCommon(PathType, StringType, alias defaultSep, alias cmpFunc)
   {
     auto l = this.data.empty ? "." : this.data;
     auto r = other.data.empty ? "." : other.data;
-    return cmpFunc(l, r);
+    static if (theCaseSensitivity == std.path.CaseSensetive.no) {
+      return std.uni.sicmp(l, r);
+    }
+    else {
+      return std.algorithm.cmp(l, r);
+    }
   }
 
   ///
@@ -530,13 +561,13 @@ mixin template PathCommon(PathType, StringType, alias defaultSep, alias cmpFunc)
 
 struct WindowsPath
 {
-  mixin PathCommon!(WindowsPath, string, '\\', std.uni.sicmp);
+  mixin PathCommon!(WindowsPath, string, '\\', std.path.CaseSensitive.no);
 }
 
 
 struct PosixPath
 {
-  mixin PathCommon!(PosixPath, string, '/', std.algorithm.cmp);
+  mixin PathCommon!(PosixPath, string, '/', std.path.CaseSensitive.yes);
 }
 
 /// Set the default path depending on the current platform.
