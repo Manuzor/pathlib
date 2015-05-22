@@ -4,14 +4,13 @@
 
   ToDo:
     - Path().open(...)
-    - Path().glob(); Path().rglob();
 +/
 module pathlib;
 
 static import std.path;
 static import std.file;
 static import std.uni;
-import std.array      : array, replace, replaceLast, join;
+import std.array      : array, replace, replaceLast;
 import std.format     : format;
 import std.string     : split, indexOf, empty, squeeze, removechars, lastIndexOf;
 import std.conv       : to;
@@ -30,20 +29,30 @@ debug
   }
 }
 
-template assertEqual(alias predicate = "a == b")
+void assertEqual(alias predicate = "a == b", A, B, StringType = string)
+                (A a, B b, StringType fmt = "`%s` must be equal to `%s`")
 {
-  void assertEqual(A, B)(A a, B b) {
-    static if (isInputRange!A && isInputRange!B) {
-      assert(std.algorithm.equal!predicate(a, b), format("`%s` must be equal to `%s`", a, b));
-    }
-    else {
-      assert(a == b, format("`%s` must be equal to `%s`", a, b));
-    }
+  static if (isInputRange!A && isInputRange!B) {
+    assert(std.algorithm.equal!predicate(a, b), format(fmt, a, b));
+  }
+  else {
+    import std.functional : binaryFun;
+    assert(binaryFun!predicate(a, b), format(fmt, a, b));
   }
 }
 
-void assertEmpty(A)(A a) {
-  assert(a.empty, format("String `%s` should be empty.", a));
+void assertNotEqual(alias predicate = "a != b", A, B, StringType = string)
+                    (A a, B b, StringType fmt = "`%s` must not be equal to `%s`")
+{
+  assertEqual!predicate(a, b, fmt);
+}
+
+void assertEmpty(A, StringType = string)(A a, StringType fmt = "String `%s` should be empty.") {
+  assert(a.empty, format(fmt, a));
+}
+
+void assertNotEmpty(A, StringType = string)(A a, StringType fmt = "String `%s` should be empty.") {
+  assert(!a.empty, format(fmt, a));
 }
 
 
@@ -111,12 +120,12 @@ auto root(PathType)(PathType p) {
 
 ///
 unittest {
-  assert(WindowsPath("").root == "");
-  assert(PosixPath("").root == "");
-  assert(WindowsPath("C:/Hello/World").root == "C:", WindowsPath("C:/Hello/World").root);
-  assert(WindowsPath("/Hello/World").root == "");
-  assert(PosixPath("/hello/world").root == "/", PosixPath("/hello/world").root);
-  assert(PosixPath("C:/hello/world").root == "");
+  assertEqual(WindowsPath("").root, "");
+  assertEqual(PosixPath("").root, "");
+  assertEqual(WindowsPath("C:/Hello/World").root, "C:");
+  assertEqual(WindowsPath("/Hello/World").root, "");
+  assertEqual(PosixPath("/hello/world").root, "/");
+  assertEqual(PosixPath("C:/hello/world").root, "");
 }
 
 
@@ -136,12 +145,12 @@ auto drive(PathType)(PathType p) {
 
 ///
 unittest {
-  assert(WindowsPath("").drive == "");
-  assert(WindowsPath("/Hello/World").drive == "");
-  assert(WindowsPath("C:/Hello/World").drive == "C:");
-  assert(PosixPath("").drive == "");
-  assert(PosixPath("/Hello/World").drive == "");
-  assert(PosixPath("C:/Hello/World").drive == "", PosixPath("C:/Hello/World").drive);
+  assertEqual(WindowsPath("").drive, "");
+  assertEqual(WindowsPath("/Hello/World").drive, "");
+  assertEqual(WindowsPath("C:/Hello/World").drive, "C:");
+  assertEqual(PosixPath("").drive, "");
+  assertEqual(PosixPath("/Hello/World").drive, "");
+  assertEqual(PosixPath("C:/Hello/World").drive, "");
 }
 
 
@@ -256,6 +265,27 @@ unittest {
   assertEqual(WindowsPath("C:/hello/world.exe.xml").parts, [`C:\`, "hello", "world.exe.xml"]);
   assertEqual(PosixPath("hello/world.exe.xml").parts, ["hello", "world.exe.xml"]);
   assertEqual(PosixPath("/hello/world.exe.xml").parts, ["/", "hello", "world.exe.xml"]);
+}
+
+
+auto parent(PathType)(PathType p) {
+  auto theParts = p.parts.map!(a => PathType(a));
+  if (theParts.length > 1) {
+    return theParts[0 .. $ - 1].reduce!((a, b){ return a ~ b;});
+  }
+  return PathType();
+}
+
+///
+unittest {
+  assertEqual(Path().parent, Path());
+  assertEqual(Path("IHaveNoParents").parent, Path());
+  assertEqual(WindowsPath("C:/hello/world").parent, WindowsPath(`C:\hello`));
+  assertEqual(WindowsPath("C:/hello/world/").parent, WindowsPath(`C:\hello`));
+  assertEqual(WindowsPath("C:/hello/world.exe.foo").parent, WindowsPath(`C:\hello`));
+  assertEqual(PosixPath("/hello/world").parent, PosixPath("/hello"));
+  assertEqual(PosixPath("/hello/\\/world/").parent, PosixPath("/hello"));
+  assertEqual(PosixPath("/hello.foo.bar/world/").parent, PosixPath("/hello.foo.bar"));
 }
 
 
@@ -454,6 +484,16 @@ unittest {
 }
 
 
+/// Whether the given path $(D p) points to a symbolic link (or junction point in Windows).
+bool isSymlink(Path p) {
+  return std.file.isSymlink(p.normalizedData);
+}
+
+///
+unittest {
+}
+
+
 // Resolve all ".", "..", and symlinks.
 Path resolve(Path p) {
   return Path(Path(std.path.absolutePath(p.data)).normalizedData);
@@ -461,6 +501,7 @@ Path resolve(Path p) {
 
 ///
 unittest {
+  assertNotEqual(Path(), Path().resolve());
 }
 
 
@@ -471,7 +512,44 @@ Path cwd() {
 
 ///
 unittest {
-  assert(!cwd().data.empty);
+  assertNotEmpty(cwd().data);
+}
+
+
+/// The path to the current executable.
+Path currentExePath() {
+  return Path(std.file.thisExePath()).resolve();
+}
+
+///
+unittest {
+  assertNotEmpty(currentExePath().data);
+}
+
+
+void mkdir(Path p) {
+  std.file.mkdirRecurse(p.normalizedData);
+}
+
+
+void chdir(Path p) {
+  std.file.chdir(p.normalizedData);
+}
+
+
+/// Generate an array of Paths that match the given pattern in and beneath the given path.
+auto glob(PatternType)(Path p, PatternType pattern) {
+  import std.algorithm : filter;
+  import std.file : SpanMode;
+
+  return std.file.dirEntries(p.normalizedData, SpanMode.depth)
+         .map!(a => Path(a.name))
+         .filter!(a => a.match(pattern));
+}
+
+///
+unittest {
+  assertNotEmpty(currentExePath().parent.glob("*"));
 }
 
 
