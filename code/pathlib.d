@@ -542,7 +542,7 @@ auto glob(PatternType)(Path p, PatternType pattern) {
   import std.algorithm : filter;
   import std.file : SpanMode;
 
-  return std.file.dirEntries(p.normalizedData, SpanMode.depth)
+  return std.file.dirEntries(p.normalizedData, SpanMode.shallow)
          .map!(a => Path(a.name))
          .filter!(a => a.match(pattern));
 }
@@ -550,6 +550,22 @@ auto glob(PatternType)(Path p, PatternType pattern) {
 ///
 unittest {
   assertNotEmpty(currentExePath().parent.glob("*"));
+}
+
+
+/// Generate an array of Paths that match the given pattern in and beneath the given path.
+auto rglob(PatternType)(Path p, PatternType pattern) {
+  import std.algorithm : filter;
+  import std.file : SpanMode;
+
+  return std.file.dirEntries(p.normalizedData, SpanMode.breadth)
+         .map!(a => Path(a.name))
+         .filter!(a => a.match(pattern));
+}
+
+///
+unittest {
+  assertNotEmpty(currentExePath().parent.rglob("*"));
 }
 
 

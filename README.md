@@ -18,4 +18,4 @@ _+ Addition | - Removal | $ Change_
 * $ Instead of overloading operator `/`, the concatenation operator `~` is overloaded instead: `Path("hello") ~ "world" ~ "goodBye` // WindowsPath("hello\\world\\goodBye") or PosixPath("hello/world/goodBye")
 * $ Instead of `suffix()` and `suffixes()` there are `extension()`, `extensions()`, and `fullExtension()`.
 * $ While pythons pathlib usually uses '/' as the path segment separator, we try to maintain the separator for the current type of path as much as possible.
-* - There is no `rglob()`, only `glob()` which is recursive by default and corresponds to phobos' `std.path.globMatch()`.
+* $ `glob()` does not (yet?) support recursive patterns such as `"**/*.cpp"`. Use `rglob()` for this instead.
