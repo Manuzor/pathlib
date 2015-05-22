@@ -569,6 +569,17 @@ unittest {
 }
 
 
+auto open(Path p, in char[] openMode = "rb") {
+  static import std.stdio;
+
+  return std.stdio.File(p.normalizedData, openMode);
+}
+
+///
+unittest {
+}
+
+
 mixin template PathCommon(PathType, StringType, alias theSeparator, alias theCaseSensitivity)
   if (isSomeString!StringType && isSomeChar!(typeof(theSeparator)))
 {
