@@ -542,9 +542,8 @@ auto glob(PatternType)(Path p, PatternType pattern) {
   import std.algorithm : filter;
   import std.file : SpanMode;
 
-  return std.file.dirEntries(p.normalizedData, SpanMode.shallow)
-         .map!(a => Path(a.name))
-         .filter!(a => a.match(pattern));
+  return std.file.dirEntries(p.normalizedData, pattern, SpanMode.shallow)
+         .map!(a => Path(a.name));
 }
 
 ///
@@ -558,9 +557,8 @@ auto rglob(PatternType)(Path p, PatternType pattern) {
   import std.algorithm : filter;
   import std.file : SpanMode;
 
-  return std.file.dirEntries(p.normalizedData, SpanMode.breadth)
-         .map!(a => Path(a.name))
-         .filter!(a => a.match(pattern));
+  return std.file.dirEntries(p.normalizedData, pattern, SpanMode.breadth)
+         .map!(a => Path(a.name));
 }
 
 ///
