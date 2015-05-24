@@ -32,7 +32,7 @@ debug
 void assertEqual(alias predicate = "a == b", A, B, StringType = string)
                 (A a, B b, StringType fmt = "`%s` must be equal to `%s`")
 {
-  static if (isInputRange!A && isInputRange!B) {
+  static if(isInputRange!A && isInputRange!B) {
     assert(std.algorithm.equal!predicate(a, b), format(fmt, a, b));
   }
   else {
@@ -58,9 +58,9 @@ void assertNotEmpty(A, StringType = string)(A a, StringType fmt = "String `%s` s
 
 /// Whether $(D str) can be represented by ".".
 bool isDot(StringType)(auto ref in StringType str)
-  if (isSomeString!StringType)
+  if(isSomeString!StringType)
 {
-  if (str.length && str[0] != '.') {
+  if(str.length && str[0] != '.') {
     return false;
   }
   auto data = str.removechars("./\\");
@@ -82,7 +82,7 @@ unittest {
 
 /// Whether the path is either "" or ".".
 auto isDot(PathType)(auto ref in PathType p)
-  if (!isSomeString!PathType)
+  if(!isSomeString!PathType)
 {
   return p.data.isDot;
 }
@@ -104,13 +104,13 @@ auto root(PathType)(auto ref in PathType p) {
 
   static if(is(PathType == WindowsPath))
   {
-    if (data.length > 1 && data[1] == ':') {
+    if(data.length > 1 && data[1] == ':') {
       return data[0..2];
     }
   }
   else // Assume PosixPath
   {
-    if (data.length > 0 && data[0] == '/') {
+    if(data.length > 0 && data[0] == '/') {
       return data[0..1];
     }
   }
@@ -135,7 +135,7 @@ auto drive(PathType)(auto ref in PathType p) {
   static if(is(PathType == WindowsPath))
   {
     auto data = p.data;
-    if (data.length > 1 && data[1] == ':') {
+    if(data.length > 1 && data[1] == ':') {
       return data[0..2];
     }
   }
@@ -156,15 +156,15 @@ unittest {
 
 /// Returns: The path data using forward slashes, regardless of the current platform.
 auto posixData(PathType)(auto ref in PathType p) {
-  if (p.isDot) {
+  if(p.isDot) {
     return ".";
   }
   auto root = p.root;
   auto result = p.data[root.length..$].replace("\\", "/").squeeze("/");
-  if (result.length > 1 && result[$ - 1] == '/') {
+  if(result.length > 1 && result[$ - 1] == '/') {
     result = result[0..$ - 1];
   }
-  while (result.endsWith("/.")) {
+  while(result.endsWith("/.")) {
     result = result[0 .. $ - 2].squeeze("/");
   }
   return root ~ result;
@@ -214,10 +214,10 @@ unittest {
 auto normalizedData(PathType)(auto ref in PathType p)
   if(is(PathType == PosixPath) || is(PathType == WindowsPath))
 {
-  static if (is(PathType == PosixPath)) {
+  static if(is(PathType == PosixPath)) {
     return p.posixData;
   }
-  else static if (is(PathType == WindowsPath)) {
+  else static if(is(PathType == WindowsPath)) {
     return p.windowsData;
   }
 }
@@ -238,7 +238,7 @@ auto asNormalizedPath(PathType)(auto ref in PathType p) {
 
 /// Whether the path is absolute.
 auto isAbsolute(PathType)(auto ref in PathType p) {
-  // If the path has a root or a drive, it is absolute.
+  // Ifthe path has a root or a drive, it is absolute.
   return !p.root.empty || !p.drive.empty;
 }
 
@@ -247,7 +247,7 @@ auto isAbsolute(PathType)(auto ref in PathType p) {
 auto parts(PathType)(auto ref in PathType p) {
   string[] theParts;
   auto root = p.root;
-  if (!root.empty) {
+  if(!root.empty) {
     static if(is(PathType == WindowsPath)) {
       root ~= p.separator;
     }
@@ -270,7 +270,7 @@ unittest {
 
 auto parent(PathType)(auto ref in PathType p) {
   auto theParts = p.parts.map!(a => PathType(a));
-  if (theParts.length > 1) {
+  if(theParts.length > 1) {
     return theParts[0 .. $ - 1].reduce!((a, b){ return a ~ b;});
   }
   return PathType();
@@ -332,10 +332,10 @@ unittest {
 auto extension(PathType)(auto ref in PathType p) {
   auto data = p.name;
   auto i = data.lastIndexOf('.');
-  if (i < 0) {
+  if(i < 0) {
     return "";
   }
-  if (i + 1 == data.length) {
+  if(i + 1 == data.length) {
     // This prevents preserving the dot in empty extensions such as `hello.foo.`.
     ++i;
   }
@@ -360,7 +360,7 @@ auto extensions(PathType)(auto ref in PathType p) {
   import std.range : dropOne;
 
   auto result = p.name.splitter('.').filter!(a => !a.empty);
-  if (!result.empty) {
+  if(!result.empty) {
     result = result.dropOne;
   }
   return result.map!(a => '.' ~ a).array;
@@ -384,10 +384,10 @@ unittest {
 auto fullExtension(PathType)(auto ref in PathType p) {
   auto data = p.name;
   auto i = data.indexOf('.');
-  if (i < 0) {
+  if(i < 0) {
     return "";
   }
-  if (i + 1 == data.length) {
+  if(i + 1 == data.length) {
     // This prevents preserving the dot in empty extensions such as `hello.foo.`.
     ++i;
   }
@@ -410,10 +410,10 @@ unittest {
 auto stem(PathType)(auto ref in PathType p) {
   auto data = p.name;
   auto i = data.indexOf('.');
-  if (i < 0) {
+  if(i < 0) {
     return data;
   }
-  if (i + 1 == data.length) {
+  if(i + 1 == data.length) {
     // This prevents preserving the dot in empty extensions such as `hello.foo.`.
     ++i;
   }
@@ -579,7 +579,7 @@ unittest {
 
 
 mixin template PathCommon(PathType, StringType, alias theSeparator, alias theCaseSensitivity)
-  if (isSomeString!StringType && isSomeChar!(typeof(theSeparator)))
+  if(isSomeString!StringType && isSomeChar!(typeof(theSeparator)))
 {
   StringType data = ".";
 
@@ -600,14 +600,14 @@ mixin template PathCommon(PathType, StringType, alias theSeparator, alias theCas
 
   /// Concatenate a path and a string, which will be treated as a path.
   auto opBinary(string op, InStringType)(auto ref in InStringType str) const
-    if (op == "~" && isSomeString!InStringType)
+    if(op == "~" && isSomeString!InStringType)
   {
     return this ~ PathType(str);
   }
 
   /// Concatenate two paths.
   auto opBinary(string op)(auto ref in PathType other) const
-    if (op == "~")
+    if(op == "~")
   {
     auto p = PathType(data);
     p ~= other;
@@ -616,30 +616,30 @@ mixin template PathCommon(PathType, StringType, alias theSeparator, alias theCas
 
   /// Concatenate the path-string $(D str) to this path.
   void opOpAssign(string op, InStringType)(auto ref in InStringType str)
-    if (op == "~" && isSomeString!InStringType)
+    if(op == "~" && isSomeString!InStringType)
   {
     this ~= PathType(str);
   }
 
   /// Concatenate the path $(D other) to this path.
   void opOpAssign(string op)(auto ref in PathType other)
-    if (op == "~")
+    if(op == "~")
   {
     auto l = PathType(this.normalizedData);
     auto r = PathType(other.normalizedData);
 
-    if (l.isDot || r.isAbsolute) {
+    if(l.isDot || r.isAbsolute) {
       this.data = r.data;
       return;
     }
 
-    if (r.isDot) {
+    if(r.isDot) {
       this.data = l.data;
       return;
     }
 
     auto sep = "";
-    if (!l.data.endsWith('/', '\\') && !r.data.startsWith('/', '\\')) {
+    if(!l.data.endsWith('/', '\\') && !r.data.startsWith('/', '\\')) {
       sep = [separator];
     }
 
@@ -660,11 +660,11 @@ mixin template PathCommon(PathType, StringType, alias theSeparator, alias theCas
 
   /// Equality overload.
   bool opBinary(string op)(auto ref in PathType other) const
-    if (op == "==")
+    if(op == "==")
   {
     auto l = this.data.empty ? "." : this.data;
     auto r = other.data.empty ? "." : other.data;
-    static if (theCaseSensitivity == std.path.CaseSensetive.no) {
+    static if(theCaseSensitivity == std.path.CaseSensetive.no) {
       return std.uni.sicmp(l, r);
     }
     else {
