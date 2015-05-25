@@ -578,6 +578,48 @@ unittest {
 }
 
 
+void copy(in Path p, in Path destination) {
+  std.file.copy(p.normalizedData, p.destination);
+}
+
+///
+unittest {
+}
+
+
+/// Remove path from filesystem. Similar to unix `rm`. If the path is a dir, will reecursively remove all subdirs by default.
+void remove(in Path p, bool recursive = true) {
+  if(p.isFile) {
+    std.file.remove(p.normalizedData);
+  }
+  else if(recursive) {
+    std.file.rmdirRecurse(p.normalizedData);
+  }
+  else {
+    std.file.rmdir(p.normalizedData);
+  }
+}
+
+///
+unittest {
+}
+
+
+///
+void mkdir(in Path p, bool parents = true) {
+  if(parents) {
+    std.file.mkdirRecurse(p.normalizedData);
+  }
+  else {
+    std.file.mkdir(p.normalizedData);
+  }
+}
+
+///
+unittest {
+}
+
+
 mixin template PathCommon(PathType, StringType, alias theSeparator, alias theCaseSensitivity)
   if(isSomeString!StringType && isSomeChar!(typeof(theSeparator)))
 {
