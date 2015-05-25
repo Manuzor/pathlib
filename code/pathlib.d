@@ -578,12 +578,30 @@ unittest {
 }
 
 
-void copy(in Path p, in Path destination) {
-  std.file.copy(p.normalizedData, p.destination);
+void copy(in Path from, in Path to) {
+  std.file.copy(from.normalizedData, p.to);
 }
 
 ///
 unittest {
+}
+
+
+bool copyIfNewer(in Path from, in Path to) {
+  if(!to.exists) {
+    copy(from, to);
+    return true;
+  }
+
+  import std.datetime : SysTime;
+  SysTime _, from_modTime, to_modTime;
+  std.file.getTimes(from.normalizedData, _, from_modTime);
+  std.file.getTimes(to.normalizedData, _, to_modTime);
+  if(from_modTime > to_modTime) {
+    copy(from, to);
+    return true;
+  }
+  return false;
 }
 
 
