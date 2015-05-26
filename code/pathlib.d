@@ -579,7 +579,7 @@ unittest {
 
 
 void copy(in Path from, in Path to) {
-  std.file.copy(from.normalizedData, p.to);
+  std.file.copy(from.normalizedData, to.normalizedData);
 }
 
 ///
@@ -659,32 +659,28 @@ mixin template PathCommon(PathType, StringType, alias theSeparator, alias theCas
 
 
   /// Concatenate a path and a string, which will be treated as a path.
-  auto opBinary(string op, InStringType)(auto ref in InStringType str) const
-    if(op == "~" && isSomeString!InStringType)
+  auto opBinary(string op : "~", InStringType)(auto ref in InStringType str) const
+    if(isSomeString!InStringType)
   {
     return this ~ PathType(str);
   }
 
   /// Concatenate two paths.
-  auto opBinary(string op)(auto ref in PathType other) const
-    if(op == "~")
-  {
+  auto opBinary(string op : "~")(auto ref in PathType other) const {
     auto p = PathType(data);
     p ~= other;
     return p;
   }
 
   /// Concatenate the path-string $(D str) to this path.
-  void opOpAssign(string op, InStringType)(auto ref in InStringType str)
-    if(op == "~" && isSomeString!InStringType)
+  void opOpAssign(string op : "~", InStringType)(auto ref in InStringType str)
+    if(isSomeString!InStringType)
   {
     this ~= PathType(str);
   }
 
   /// Concatenate the path $(D other) to this path.
-  void opOpAssign(string op)(auto ref in PathType other)
-    if(op == "~")
-  {
+  void opOpAssign(string op : "~")(auto ref in PathType other) {
     auto l = PathType(this.normalizedData);
     auto r = PathType(other.normalizedData);
 
@@ -719,9 +715,7 @@ mixin template PathCommon(PathType, StringType, alias theSeparator, alias theCas
 
 
   /// Equality overload.
-  bool opBinary(string op)(auto ref in PathType other) const
-    if(op == "==")
-  {
+  bool opBinary(string op : "==")(auto ref in PathType other) const {
     auto l = this.data.empty ? "." : this.data;
     auto r = other.data.empty ? "." : other.data;
     static if(theCaseSensitivity == std.path.CaseSensetive.no) {
@@ -755,12 +749,36 @@ mixin template PathCommon(PathType, StringType, alias theSeparator, alias theCas
 struct WindowsPath
 {
   mixin PathCommon!(WindowsPath, string, '\\', std.path.CaseSensitive.no);
+
+  version(Windows) {
+    /// Overload conversion `to` for Path => std.file.DirEntry.
+    auto opCast(To : std.file.DirEntry)() const {
+      return To(this.normalizedData);
+    }
+
+    ///
+    unittest {
+      auto d = cwd().to!(std.file.DirEntry);
+    }
+  }
 }
 
 
 struct PosixPath
 {
   mixin PathCommon!(PosixPath, string, '/', std.path.CaseSensitive.yes);
+
+  version(Posix) {
+    /// Overload conversion `to` for Path => std.file.DirEntry.
+    auto opCast(To : std.file.DirEntry)() const {
+      return To(this.normalizedData);
+    }
+
+    ///
+    unittest {
+      auto d = cwd().to!(std.file.DirEntry);
+    }
+  }
 }
 
 /// Set the default path depending on the current platform.
