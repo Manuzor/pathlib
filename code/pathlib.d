@@ -7,6 +7,8 @@
 +/
 module pathlib;
 
+public import std.file : SpanMode;
+
 static import std.path;
 static import std.file;
 static import std.uni;
@@ -538,32 +540,19 @@ void chdir(in Path p) {
 
 
 /// Generate an array of Paths that match the given pattern in and beneath the given path.
-auto glob(PatternType)(auto ref in Path p, PatternType pattern) {
+auto glob(PatternType)(auto ref in Path p, PatternType pattern, SpanMode spanMode = SpanMode.shallow) {
   import std.algorithm : filter;
-  import std.file : SpanMode;
 
-  return std.file.dirEntries(p.normalizedData, pattern, SpanMode.shallow)
+  return std.file.dirEntries(p.normalizedData, pattern, spanMode)
          .map!(a => Path(a.name));
 }
 
 ///
 unittest {
   assertNotEmpty(currentExePath().parent.glob("*"));
-}
-
-
-/// Generate an array of Paths that match the given pattern in and beneath the given path.
-auto rglob(PatternType)(auto ref in Path p, PatternType pattern) {
-  import std.algorithm : filter;
-  import std.file : SpanMode;
-
-  return std.file.dirEntries(p.normalizedData, pattern, SpanMode.breadth)
-         .map!(a => Path(a.name));
-}
-
-///
-unittest {
-  assertNotEmpty(currentExePath().parent.rglob("*"));
+  assertNotEmpty(currentExePath().parent.glob("*", SpanMode.shallow));
+  assertNotEmpty(currentExePath().parent.glob("*", SpanMode.breadth));
+  assertNotEmpty(currentExePath().parent.glob("*", SpanMode.depth));
 }
 
 
@@ -571,6 +560,66 @@ auto open(in Path p, in char[] openMode = "rb") {
   static import std.stdio;
 
   return std.stdio.File(p.normalizedData, openMode);
+}
+
+///
+unittest {
+}
+
+
+void copy(in Path from, in Path to) {
+  std.file.copy(from.normalizedData, to.normalizedData);
+}
+
+///
+unittest {
+}
+
+
+bool copyIfNewer(in Path from, in Path to) {
+  if(!to.exists) {
+    copy(from, to);
+    return true;
+  }
+
+  import std.datetime : SysTime;
+  SysTime _, from_modTime, to_modTime;
+  std.file.getTimes(from.normalizedData, _, from_modTime);
+  std.file.getTimes(to.normalizedData, _, to_modTime);
+  if(from_modTime > to_modTime) {
+    copy(from, to);
+    return true;
+  }
+  return false;
+}
+
+
+/// Remove path from filesystem. Similar to unix `rm`. If the path is a dir, will reecursively remove all subdirs by default.
+void remove(in Path p, bool recursive = true) {
+  if(p.isFile) {
+    std.file.remove(p.normalizedData);
+  }
+  else if(recursive) {
+    std.file.rmdirRecurse(p.normalizedData);
+  }
+  else {
+    std.file.rmdir(p.normalizedData);
+  }
+}
+
+///
+unittest {
+}
+
+
+///
+void mkdir(in Path p, bool parents = true) {
+  if(parents) {
+    std.file.mkdirRecurse(p.normalizedData);
+  }
+  else {
+    std.file.mkdir(p.normalizedData);
+  }
 }
 
 ///
@@ -599,32 +648,28 @@ mixin template PathCommon(PathType, StringType, alias theSeparator, alias theCas
 
 
   /// Concatenate a path and a string, which will be treated as a path.
-  auto opBinary(string op, InStringType)(auto ref in InStringType str) const
-    if(op == "~" && isSomeString!InStringType)
+  auto opBinary(string op : "~", InStringType)(auto ref in InStringType str) const
+    if(isSomeString!InStringType)
   {
     return this ~ PathType(str);
   }
 
   /// Concatenate two paths.
-  auto opBinary(string op)(auto ref in PathType other) const
-    if(op == "~")
-  {
+  auto opBinary(string op : "~")(auto ref in PathType other) const {
     auto p = PathType(data);
     p ~= other;
     return p;
   }
 
   /// Concatenate the path-string $(D str) to this path.
-  void opOpAssign(string op, InStringType)(auto ref in InStringType str)
-    if(op == "~" && isSomeString!InStringType)
+  void opOpAssign(string op : "~", InStringType)(auto ref in InStringType str)
+    if(isSomeString!InStringType)
   {
     this ~= PathType(str);
   }
 
   /// Concatenate the path $(D other) to this path.
-  void opOpAssign(string op)(auto ref in PathType other)
-    if(op == "~")
-  {
+  void opOpAssign(string op : "~")(auto ref in PathType other) {
     auto l = PathType(this.normalizedData);
     auto r = PathType(other.normalizedData);
 
@@ -659,9 +704,7 @@ mixin template PathCommon(PathType, StringType, alias theSeparator, alias theCas
 
 
   /// Equality overload.
-  bool opBinary(string op)(auto ref in PathType other) const
-    if(op == "==")
-  {
+  bool opBinary(string op : "==")(auto ref in PathType other) const {
     auto l = this.data.empty ? "." : this.data;
     auto r = other.data.empty ? "." : other.data;
     static if(theCaseSensitivity == std.path.CaseSensetive.no) {
@@ -695,12 +738,36 @@ mixin template PathCommon(PathType, StringType, alias theSeparator, alias theCas
 struct WindowsPath
 {
   mixin PathCommon!(WindowsPath, string, '\\', std.path.CaseSensitive.no);
+
+  version(Windows) {
+    /// Overload conversion `to` for Path => std.file.DirEntry.
+    auto opCast(To : std.file.DirEntry)() const {
+      return To(this.normalizedData);
+    }
+
+    ///
+    unittest {
+      auto d = cwd().to!(std.file.DirEntry);
+    }
+  }
 }
 
 
 struct PosixPath
 {
   mixin PathCommon!(PosixPath, string, '/', std.path.CaseSensitive.yes);
+
+  version(Posix) {
+    /// Overload conversion `to` for Path => std.file.DirEntry.
+    auto opCast(To : std.file.DirEntry)() const {
+      return To(this.normalizedData);
+    }
+
+    ///
+    unittest {
+      auto d = cwd().to!(std.file.DirEntry);
+    }
+  }
 }
 
 /// Set the default path depending on the current platform.
