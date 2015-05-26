@@ -58,6 +58,171 @@ void assertNotEmpty(A, StringType = string)(A a, StringType fmt = "String `%s` s
 }
 
 
+/// Exception that will be thrown when any path operations fail.
+class PathException : Exception
+{
+  @safe pure nothrow
+  this(string msg)
+  {
+    super(msg);
+  }
+}
+
+
+mixin template PathCommon(PathType, StringType, alias theSeparator, alias theCaseSensitivity)
+  if(isSomeString!StringType && isSomeChar!(typeof(theSeparator)))
+{
+  StringType data = ".";
+
+  ///
+  unittest {
+    assert(PathType().data != "");
+    assert(PathType("123").data == "123");
+    assert(PathType("C:///toomany//slashes!\\").data == "C:///toomany//slashes!\\");
+  }
+
+
+  /// Used to separate each path segment.
+  alias separator = theSeparator;
+
+  /// A value of std.path.CaseSensetive whether this type of path is case sensetive or not.
+  alias caseSensitivity = theCaseSensitivity;
+
+
+  /// Concatenate a path and a string, which will be treated as a path.
+  auto opBinary(string op : "~", InStringType)(auto ref in InStringType str) const
+    if(isSomeString!InStringType)
+  {
+    return this ~ PathType(str);
+  }
+
+  /// Concatenate two paths.
+  auto opBinary(string op : "~")(auto ref in PathType other) const {
+    auto p = PathType(data);
+    p ~= other;
+    return p;
+  }
+
+  /// Concatenate the path-string $(D str) to this path.
+  void opOpAssign(string op : "~", InStringType)(auto ref in InStringType str)
+    if(isSomeString!InStringType)
+  {
+    this ~= PathType(str);
+  }
+
+  /// Concatenate the path $(D other) to this path.
+  void opOpAssign(string op : "~")(auto ref in PathType other) {
+    auto l = PathType(this.normalizedData);
+    auto r = PathType(other.normalizedData);
+
+    if(l.isDot || r.isAbsolute) {
+      this.data = r.data;
+      return;
+    }
+
+    if(r.isDot) {
+      this.data = l.data;
+      return;
+    }
+
+    auto sep = "";
+    if(!l.data.endsWith('/', '\\') && !r.data.startsWith('/', '\\')) {
+      sep = [separator];
+    }
+
+    this.data = format("%s%s%s", l.data, sep, r.data);
+  }
+
+  ///
+  unittest {
+    assertEqual(PathType() ~ "hello", PathType("hello"));
+    assertEqual(PathType("") ~ "hello", PathType("hello"));
+    assertEqual(PathType(".") ~ "hello", PathType("hello"));
+    assertEqual(PosixPath("/") ~ "hello", PosixPath("/hello"));
+    assertEqual(WindowsPath("/") ~ "hello", WindowsPath(`\hello`));
+    assertEqual(PosixPath("/") ~ "hello" ~ "world", PosixPath("/hello/world"));
+    assertEqual(WindowsPath(`C:\`) ~ "hello" ~ "world", WindowsPath(`C:\hello\world`));
+  }
+
+
+  /// Equality overload.
+  bool opBinary(string op : "==")(auto ref in PathType other) const {
+    auto l = this.data.empty ? "." : this.data;
+    auto r = other.data.empty ? "." : other.data;
+    static if(theCaseSensitivity == std.path.CaseSensetive.no) {
+      return std.uni.sicmp(l, r);
+    }
+    else {
+      return std.algorithm.cmp(l, r);
+    }
+  }
+
+  ///
+  unittest {
+    auto p1 = PathType("/hello/world");
+    auto p2 = PathType("/hello/world");
+    assertEqual(p1, p2);
+  }
+
+
+  /// Cast the path to a string.
+  auto toString(OtherStringType = StringType)() const {
+    return this.data.to!OtherStringType;
+  }
+
+  ///
+  unittest {
+    assertEqual(PathType("C:/hello/world.exe.xml").to!StringType, "C:/hello/world.exe.xml");
+  }
+}
+
+
+struct WindowsPath
+{
+  mixin PathCommon!(WindowsPath, string, '\\', std.path.CaseSensitive.no);
+
+  version(Windows) {
+    /// Overload conversion `to` for Path => std.file.DirEntry.
+    auto opCast(To : std.file.DirEntry)() const {
+      return To(this.normalizedData);
+    }
+
+    ///
+    unittest {
+      auto d = cwd().to!(std.file.DirEntry);
+    }
+  }
+}
+
+
+struct PosixPath
+{
+  mixin PathCommon!(PosixPath, string, '/', std.path.CaseSensitive.yes);
+
+  version(Posix) {
+    /// Overload conversion `to` for Path => std.file.DirEntry.
+    auto opCast(To : std.file.DirEntry)() const {
+      return To(this.normalizedData);
+    }
+
+    ///
+    unittest {
+      auto d = cwd().to!(std.file.DirEntry);
+    }
+  }
+}
+
+/// Set the default path depending on the current platform.
+version(Windows)
+{
+  alias Path = WindowsPath;
+}
+else // Assume posix on non-windows platforms.
+{
+  alias Path = PosixPath;
+}
+
+
 /// Whether $(D str) can be represented by ".".
 bool isDot(StringType)(auto ref in StringType str)
   if(isSomeString!StringType)
@@ -468,7 +633,7 @@ unittest {
 
 /// Whether the path is an existing directory.
 bool isDir(in Path p) {
-  return p.exists && std.file.isDir(p.data);
+  return std.file.isDir(p.data);
 }
 
 ///
@@ -478,7 +643,7 @@ unittest {
 
 /// Whether the path is an existing file.
 bool isFile(in Path p) {
-  return p.exists && std.file.isFile(p.data);
+  return std.file.isFile(p.data);
 }
 
 ///
@@ -624,158 +789,4 @@ void mkdir(in Path p, bool parents = true) {
 
 ///
 unittest {
-}
-
-
-mixin template PathCommon(PathType, StringType, alias theSeparator, alias theCaseSensitivity)
-  if(isSomeString!StringType && isSomeChar!(typeof(theSeparator)))
-{
-  StringType data = ".";
-
-  ///
-  unittest {
-    assert(PathType().data != "");
-    assert(PathType("123").data == "123");
-    assert(PathType("C:///toomany//slashes!\\").data == "C:///toomany//slashes!\\");
-  }
-
-
-  /// Used to separate each path segment.
-  alias separator = theSeparator;
-
-  /// A value of std.path.CaseSensetive whether this type of path is case sensetive or not.
-  alias caseSensitivity = theCaseSensitivity;
-
-
-  /// Concatenate a path and a string, which will be treated as a path.
-  auto opBinary(string op : "~", InStringType)(auto ref in InStringType str) const
-    if(isSomeString!InStringType)
-  {
-    return this ~ PathType(str);
-  }
-
-  /// Concatenate two paths.
-  auto opBinary(string op : "~")(auto ref in PathType other) const {
-    auto p = PathType(data);
-    p ~= other;
-    return p;
-  }
-
-  /// Concatenate the path-string $(D str) to this path.
-  void opOpAssign(string op : "~", InStringType)(auto ref in InStringType str)
-    if(isSomeString!InStringType)
-  {
-    this ~= PathType(str);
-  }
-
-  /// Concatenate the path $(D other) to this path.
-  void opOpAssign(string op : "~")(auto ref in PathType other) {
-    auto l = PathType(this.normalizedData);
-    auto r = PathType(other.normalizedData);
-
-    if(l.isDot || r.isAbsolute) {
-      this.data = r.data;
-      return;
-    }
-
-    if(r.isDot) {
-      this.data = l.data;
-      return;
-    }
-
-    auto sep = "";
-    if(!l.data.endsWith('/', '\\') && !r.data.startsWith('/', '\\')) {
-      sep = [separator];
-    }
-
-    this.data = format("%s%s%s", l.data, sep, r.data);
-  }
-
-  ///
-  unittest {
-    assertEqual(PathType() ~ "hello", PathType("hello"));
-    assertEqual(PathType("") ~ "hello", PathType("hello"));
-    assertEqual(PathType(".") ~ "hello", PathType("hello"));
-    assertEqual(PosixPath("/") ~ "hello", PosixPath("/hello"));
-    assertEqual(WindowsPath("/") ~ "hello", WindowsPath(`\hello`));
-    assertEqual(PosixPath("/") ~ "hello" ~ "world", PosixPath("/hello/world"));
-    assertEqual(WindowsPath(`C:\`) ~ "hello" ~ "world", WindowsPath(`C:\hello\world`));
-  }
-
-
-  /// Equality overload.
-  bool opBinary(string op : "==")(auto ref in PathType other) const {
-    auto l = this.data.empty ? "." : this.data;
-    auto r = other.data.empty ? "." : other.data;
-    static if(theCaseSensitivity == std.path.CaseSensetive.no) {
-      return std.uni.sicmp(l, r);
-    }
-    else {
-      return std.algorithm.cmp(l, r);
-    }
-  }
-
-  ///
-  unittest {
-    auto p1 = PathType("/hello/world");
-    auto p2 = PathType("/hello/world");
-    assertEqual(p1, p2);
-  }
-
-
-  /// Cast the path to a string.
-  auto toString(OtherStringType = StringType)() const {
-    return this.data.to!OtherStringType;
-  }
-
-  ///
-  unittest {
-    assertEqual(PathType("C:/hello/world.exe.xml").to!StringType, "C:/hello/world.exe.xml");
-  }
-}
-
-
-struct WindowsPath
-{
-  mixin PathCommon!(WindowsPath, string, '\\', std.path.CaseSensitive.no);
-
-  version(Windows) {
-    /// Overload conversion `to` for Path => std.file.DirEntry.
-    auto opCast(To : std.file.DirEntry)() const {
-      return To(this.normalizedData);
-    }
-
-    ///
-    unittest {
-      auto d = cwd().to!(std.file.DirEntry);
-    }
-  }
-}
-
-
-struct PosixPath
-{
-  mixin PathCommon!(PosixPath, string, '/', std.path.CaseSensitive.yes);
-
-  version(Posix) {
-    /// Overload conversion `to` for Path => std.file.DirEntry.
-    auto opCast(To : std.file.DirEntry)() const {
-      return To(this.normalizedData);
-    }
-
-    ///
-    unittest {
-      auto d = cwd().to!(std.file.DirEntry);
-    }
-  }
-}
-
-/// Set the default path depending on the current platform.
-version(Windows)
-{
-  alias Path = WindowsPath;
-}
-else // Assume posix on non-windows platforms.
-{
-  alias Path = PosixPath;
 }
