@@ -7,6 +7,8 @@
 +/
 module pathlib;
 
+public import std.file : SpanMode;
+
 static import std.path;
 static import std.file;
 static import std.uni;
@@ -538,32 +540,19 @@ void chdir(in Path p) {
 
 
 /// Generate an array of Paths that match the given pattern in and beneath the given path.
-auto glob(PatternType)(auto ref in Path p, PatternType pattern) {
+auto glob(PatternType)(auto ref in Path p, PatternType pattern, SpanMode spanMode = SpanMode.shallow) {
   import std.algorithm : filter;
-  import std.file : SpanMode;
 
-  return std.file.dirEntries(p.normalizedData, pattern, SpanMode.shallow)
+  return std.file.dirEntries(p.normalizedData, pattern, spanMode)
          .map!(a => Path(a.name));
 }
 
 ///
 unittest {
   assertNotEmpty(currentExePath().parent.glob("*"));
-}
-
-
-/// Generate an array of Paths that match the given pattern in and beneath the given path.
-auto rglob(PatternType)(auto ref in Path p, PatternType pattern) {
-  import std.algorithm : filter;
-  import std.file : SpanMode;
-
-  return std.file.dirEntries(p.normalizedData, pattern, SpanMode.breadth)
-         .map!(a => Path(a.name));
-}
-
-///
-unittest {
-  assertNotEmpty(currentExePath().parent.rglob("*"));
+  assertNotEmpty(currentExePath().parent.glob("*", SpanMode.shallow));
+  assertNotEmpty(currentExePath().parent.glob("*", SpanMode.breadth));
+  assertNotEmpty(currentExePath().parent.glob("*", SpanMode.depth));
 }
 
 
