@@ -18,9 +18,8 @@ import std.string     : split, indexOf, empty, squeeze, removechars, lastIndexOf
 import std.conv       : to;
 import std.typecons   : Flag;
 import std.traits     : isSomeString, isSomeChar;
-import std.algorithm  : equal, map, reduce, startsWith, endsWith, strip, stripRight, stripLeft, remove;
+import std.algorithm  : filter, equal, map, reduce, startsWith, endsWith, strip, stripRight, stripLeft, remove;
 import std.range      : iota, take, isInputRange;
-
 
 debug
 {
@@ -599,6 +598,36 @@ unittest {
 }
 
 
+/// Create a path from $(D p) that is relative to $(D parent).
+auto relativeTo(PathType)(in auto ref PathType p, in auto ref PathType parent) {
+  auto ldata = p.normalizedData;
+  auto rdata = parent.normalizedData;
+  if(!ldata.startsWith(rdata)) {
+    throw new PathException(format("'%s' is not a subpath of '%s'.", ldata, rdata));
+  }
+  auto sliceStart = rdata.length;
+  if(rdata.length != ldata.length) {
+    // Remove trailing path separator.
+    ++sliceStart;
+  }
+  auto result = ldata[sliceStart .. $];
+  return result.isDot ? PathType(".") : PathType(result);
+}
+
+///
+unittest {
+  import std.exception : assertThrown;
+
+  assertEqual(Path("C:/hello/world.exe").relativeTo(Path("C:/hello")), Path("world.exe"));
+  assertEqual(Path("C:/hello").relativeTo(Path("C:/hello")), Path());
+  assertEqual(Path("C:/hello/").relativeTo(Path("C:/hello")), Path());
+  assertEqual(Path("C:/hello").relativeTo(Path("C:/hello/")), Path());
+  assertEqual(WindowsPath("C:/foo/bar/baz").relativeTo(WindowsPath("C:/foo")), WindowsPath(`bar\baz`));
+  assertEqual(PosixPath("C:/foo/bar/baz").relativeTo(PosixPath("C:/foo")), PosixPath("bar/baz"));
+  assertThrown!PathException(Path("a").relativeTo(Path("b")));
+}
+
+
 /// Whether the given path matches the given glob-style pattern
 auto match(PathType, Pattern)(auto ref in PathType p, Pattern pattern) {
   import std.path : globMatch;
@@ -694,13 +723,12 @@ unittest {
 }
 
 
-void mkdir(in Path p) {
-  std.file.mkdirRecurse(p.normalizedData);
-}
-
-
 void chdir(in Path p) {
   std.file.chdir(p.normalizedData);
+}
+
+///
+unittest {
 }
 
 
@@ -732,7 +760,10 @@ unittest {
 }
 
 
-void copy(in Path from, in Path to) {
+/// Interpret both argument as the paths to a file.
+/// Behaves like std.file.copy.
+/// See_Also: copyTo(in ref Path, in ref Path)
+void copyFileTo(in ref Path from, in ref Path to) {
   std.file.copy(from.normalizedData, to.normalizedData);
 }
 
@@ -741,22 +772,60 @@ unittest {
 }
 
 
-bool copyIfNewer(in Path from, in Path to) {
-  if(!to.exists) {
-    copy(from, to);
-    return true;
+/// Copy a file or directory to a target file or directory.
+///
+/// This function essentially behaves like the unix shell command `cp -r` with just asingle source input.
+///
+/// Params:
+///   src = The path to a file or a directory.
+///   dest = The path to a file or a directory. If $(D src) is a directory, $(D dest) must be an existing directory.
+///
+/// Throws: PathException
+void copyTo(alias copyCondition = (a, b){ return true; })(in ref Path src, in ref Path dest) {
+  if(!src.exists) {
+    throw new PathException(format("The source path does not exist: %s", src));
   }
 
-  import std.datetime : SysTime;
-  SysTime _, from_modTime, to_modTime;
-  std.file.getTimes(from.normalizedData, _, from_modTime);
-  std.file.getTimes(to.normalizedData, _, to_modTime);
-  if(from_modTime > to_modTime) {
-    copy(from, to);
-    return true;
+  if(src.isFile) {
+    // TODO Might not work if dest.isDir. Needs testing.
+    if(copyCondition(src, dest)) src.copyTo(dest);
+    return;
   }
-  return false;
+
+  // At this point we know that src must be a dir.
+  if(dest.isFile) {
+    throw new PathException(format("Since the source path is a directory, the destination must be a directory as well. Source: %s | Destination: %s", src, dest));
+  }
+
+  if(!dest.exists) {
+    dest.mkdir(false);
+  }
+
+  foreach(srcFile; src.glob("*", SpanMode.breadth).filter!(a => !a.isDir)) {
+    auto destFile = dest ~ srcFile.relativeTo(src);
+    if(!copyCondition(srcFile, destFile)) {
+      continue;
+    }
+    logDebug("Copying %s => %s", srcFile, destFile);
+    if(!destFile.exists) {
+      destFile.parent.mkdir(true);
+    }
+    srcFile.copyFileTo(destFile);
+  }
 }
+
+///
+unittest {
+}
+
+
+alias copyToIfNewer = copyTo!((src, dest){
+  import std.datetime : SysTime;
+  SysTime _, src_modTime, dest_modTime;
+  std.file.getTimes(src.normalizedData, _, src_modTime);
+  std.file.getTimes(dest.normalizedData, _, dest_modTime);
+  return src_modTime < dest_modTime;
+});
 
 
 /// Remove path from filesystem. Similar to unix `rm`. If the path is a dir, will reecursively remove all subdirs by default.
