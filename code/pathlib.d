@@ -760,11 +760,18 @@ unittest {
 }
 
 
-/// Interpret both argument as the paths to a file.
-/// Behaves like std.file.copy.
-/// See_Also: copyTo(in ref Path, in ref Path)
-void copyFileTo(in ref Path from, in ref Path to) {
-  std.file.copy(from.normalizedData, to.normalizedData);
+/// Copy a file to some destination.
+/// If the destination exists and is a file, it is overwritten. If it is an existing directory, the actual destination will be ($D dest ~ src.name).
+/// Behaves like std.file.copy except that $(D dest) does not have to be a file.
+/// See_Also: copyTo(in Path, in Path)
+void copyFileTo(in Path src, in Path dest) {
+  logDebug("Single file copy: %s => %s.", src, dest);
+  if(dest.exists && dest.isDir) {
+    std.file.copy(src.normalizedData, (dest ~ src.name).normalizedData);
+  }
+  else {
+    std.file.copy(src.normalizedData, dest.normalizedData);
+  }
 }
 
 ///
@@ -781,14 +788,15 @@ unittest {
 ///   dest = The path to a file or a directory. If $(D src) is a directory, $(D dest) must be an existing directory.
 ///
 /// Throws: PathException
-void copyTo(alias copyCondition = (a, b){ return true; })(in ref Path src, in ref Path dest) {
+void copyTo(alias copyCondition = (a, b){ logDebug("Condition: %s | %s", a, b); return true; })(in Path src, in Path dest) {
+  logDebug("Checking if src exists.");
   if(!src.exists) {
     throw new PathException(format("The source path does not exist: %s", src));
   }
 
   if(src.isFile) {
-    // TODO Might not work if dest.isDir. Needs testing.
-    if(copyCondition(src, dest)) src.copyTo(dest);
+    logDebug("src is file.");
+    if(copyCondition(src, dest)) src.copyFileTo(dest);
     return;
   }
 
