@@ -18,9 +18,8 @@ import std.string     : split, indexOf, empty, squeeze, removechars, lastIndexOf
 import std.conv       : to;
 import std.typecons   : Flag;
 import std.traits     : isSomeString, isSomeChar;
-import std.algorithm  : equal, map, reduce, startsWith, endsWith, strip, stripRight, stripLeft, remove;
+import std.algorithm  : filter, equal, map, reduce, startsWith, endsWith, strip, stripRight, stripLeft, remove;
 import std.range      : iota, take, isInputRange;
-
 
 debug
 {
@@ -55,6 +54,171 @@ void assertEmpty(A, StringType = string)(A a, StringType fmt = "String `%s` shou
 
 void assertNotEmpty(A, StringType = string)(A a, StringType fmt = "String `%s` should be empty.") {
   assert(!a.empty, format(fmt, a));
+}
+
+
+/// Exception that will be thrown when any path operations fail.
+class PathException : Exception
+{
+  @safe pure nothrow
+  this(string msg)
+  {
+    super(msg);
+  }
+}
+
+
+mixin template PathCommon(PathType, StringType, alias theSeparator, alias theCaseSensitivity)
+  if(isSomeString!StringType && isSomeChar!(typeof(theSeparator)))
+{
+  StringType data = ".";
+
+  ///
+  unittest {
+    assert(PathType().data != "");
+    assert(PathType("123").data == "123");
+    assert(PathType("C:///toomany//slashes!\\").data == "C:///toomany//slashes!\\");
+  }
+
+
+  /// Used to separate each path segment.
+  alias separator = theSeparator;
+
+  /// A value of std.path.CaseSensetive whether this type of path is case sensetive or not.
+  alias caseSensitivity = theCaseSensitivity;
+
+
+  /// Concatenate a path and a string, which will be treated as a path.
+  auto opBinary(string op : "~", InStringType)(auto ref in InStringType str) const
+    if(isSomeString!InStringType)
+  {
+    return this ~ PathType(str);
+  }
+
+  /// Concatenate two paths.
+  auto opBinary(string op : "~")(auto ref in PathType other) const {
+    auto p = PathType(data);
+    p ~= other;
+    return p;
+  }
+
+  /// Concatenate the path-string $(D str) to this path.
+  void opOpAssign(string op : "~", InStringType)(auto ref in InStringType str)
+    if(isSomeString!InStringType)
+  {
+    this ~= PathType(str);
+  }
+
+  /// Concatenate the path $(D other) to this path.
+  void opOpAssign(string op : "~")(auto ref in PathType other) {
+    auto l = PathType(this.normalizedData);
+    auto r = PathType(other.normalizedData);
+
+    if(l.isDot || r.isAbsolute) {
+      this.data = r.data;
+      return;
+    }
+
+    if(r.isDot) {
+      this.data = l.data;
+      return;
+    }
+
+    auto sep = "";
+    if(!l.data.endsWith('/', '\\') && !r.data.startsWith('/', '\\')) {
+      sep = [separator];
+    }
+
+    this.data = format("%s%s%s", l.data, sep, r.data);
+  }
+
+  ///
+  unittest {
+    assertEqual(PathType() ~ "hello", PathType("hello"));
+    assertEqual(PathType("") ~ "hello", PathType("hello"));
+    assertEqual(PathType(".") ~ "hello", PathType("hello"));
+    assertEqual(PosixPath("/") ~ "hello", PosixPath("/hello"));
+    assertEqual(WindowsPath("/") ~ "hello", WindowsPath(`\hello`));
+    assertEqual(PosixPath("/") ~ "hello" ~ "world", PosixPath("/hello/world"));
+    assertEqual(WindowsPath(`C:\`) ~ "hello" ~ "world", WindowsPath(`C:\hello\world`));
+  }
+
+
+  /// Equality overload.
+  bool opBinary(string op : "==")(auto ref in PathType other) const {
+    auto l = this.data.empty ? "." : this.data;
+    auto r = other.data.empty ? "." : other.data;
+    static if(theCaseSensitivity == std.path.CaseSensetive.no) {
+      return std.uni.sicmp(l, r);
+    }
+    else {
+      return std.algorithm.cmp(l, r);
+    }
+  }
+
+  ///
+  unittest {
+    auto p1 = PathType("/hello/world");
+    auto p2 = PathType("/hello/world");
+    assertEqual(p1, p2);
+  }
+
+
+  /// Cast the path to a string.
+  auto toString(OtherStringType = StringType)() const {
+    return this.data.to!OtherStringType;
+  }
+
+  ///
+  unittest {
+    assertEqual(PathType("C:/hello/world.exe.xml").to!StringType, "C:/hello/world.exe.xml");
+  }
+}
+
+
+struct WindowsPath
+{
+  mixin PathCommon!(WindowsPath, string, '\\', std.path.CaseSensitive.no);
+
+  version(Windows) {
+    /// Overload conversion `to` for Path => std.file.DirEntry.
+    auto opCast(To : std.file.DirEntry)() const {
+      return To(this.normalizedData);
+    }
+
+    ///
+    unittest {
+      auto d = cwd().to!(std.file.DirEntry);
+    }
+  }
+}
+
+
+struct PosixPath
+{
+  mixin PathCommon!(PosixPath, string, '/', std.path.CaseSensitive.yes);
+
+  version(Posix) {
+    /// Overload conversion `to` for Path => std.file.DirEntry.
+    auto opCast(To : std.file.DirEntry)() const {
+      return To(this.normalizedData);
+    }
+
+    ///
+    unittest {
+      auto d = cwd().to!(std.file.DirEntry);
+    }
+  }
+}
+
+/// Set the default path depending on the current platform.
+version(Windows)
+{
+  alias Path = WindowsPath;
+}
+else // Assume posix on non-windows platforms.
+{
+  alias Path = PosixPath;
 }
 
 
@@ -434,6 +598,36 @@ unittest {
 }
 
 
+/// Create a path from $(D p) that is relative to $(D parent).
+auto relativeTo(PathType)(in auto ref PathType p, in auto ref PathType parent) {
+  auto ldata = p.normalizedData;
+  auto rdata = parent.normalizedData;
+  if(!ldata.startsWith(rdata)) {
+    throw new PathException(format("'%s' is not a subpath of '%s'.", ldata, rdata));
+  }
+  auto sliceStart = rdata.length;
+  if(rdata.length != ldata.length) {
+    // Remove trailing path separator.
+    ++sliceStart;
+  }
+  auto result = ldata[sliceStart .. $];
+  return result.isDot ? PathType(".") : PathType(result);
+}
+
+///
+unittest {
+  import std.exception : assertThrown;
+
+  assertEqual(Path("C:/hello/world.exe").relativeTo(Path("C:/hello")), Path("world.exe"));
+  assertEqual(Path("C:/hello").relativeTo(Path("C:/hello")), Path());
+  assertEqual(Path("C:/hello/").relativeTo(Path("C:/hello")), Path());
+  assertEqual(Path("C:/hello").relativeTo(Path("C:/hello/")), Path());
+  assertEqual(WindowsPath("C:/foo/bar/baz").relativeTo(WindowsPath("C:/foo")), WindowsPath(`bar\baz`));
+  assertEqual(PosixPath("C:/foo/bar/baz").relativeTo(PosixPath("C:/foo")), PosixPath("bar/baz"));
+  assertThrown!PathException(Path("a").relativeTo(Path("b")));
+}
+
+
 /// Whether the given path matches the given glob-style pattern
 auto match(PathType, Pattern)(auto ref in PathType p, Pattern pattern) {
   import std.path : globMatch;
@@ -468,7 +662,7 @@ unittest {
 
 /// Whether the path is an existing directory.
 bool isDir(in Path p) {
-  return p.exists && std.file.isDir(p.data);
+  return std.file.isDir(p.data);
 }
 
 ///
@@ -478,7 +672,7 @@ unittest {
 
 /// Whether the path is an existing file.
 bool isFile(in Path p) {
-  return p.exists && std.file.isFile(p.data);
+  return std.file.isFile(p.data);
 }
 
 ///
@@ -529,13 +723,12 @@ unittest {
 }
 
 
-void mkdir(in Path p) {
-  std.file.mkdirRecurse(p.normalizedData);
-}
-
-
 void chdir(in Path p) {
   std.file.chdir(p.normalizedData);
+}
+
+///
+unittest {
 }
 
 
@@ -567,7 +760,10 @@ unittest {
 }
 
 
-void copy(in Path from, in Path to) {
+/// Interpret both argument as the paths to a file.
+/// Behaves like std.file.copy.
+/// See_Also: copyTo(in ref Path, in ref Path)
+void copyFileTo(in ref Path from, in ref Path to) {
   std.file.copy(from.normalizedData, to.normalizedData);
 }
 
@@ -576,22 +772,60 @@ unittest {
 }
 
 
-bool copyIfNewer(in Path from, in Path to) {
-  if(!to.exists) {
-    copy(from, to);
-    return true;
+/// Copy a file or directory to a target file or directory.
+///
+/// This function essentially behaves like the unix shell command `cp -r` with just asingle source input.
+///
+/// Params:
+///   src = The path to a file or a directory.
+///   dest = The path to a file or a directory. If $(D src) is a directory, $(D dest) must be an existing directory.
+///
+/// Throws: PathException
+void copyTo(alias copyCondition = (a, b){ return true; })(in ref Path src, in ref Path dest) {
+  if(!src.exists) {
+    throw new PathException(format("The source path does not exist: %s", src));
   }
 
-  import std.datetime : SysTime;
-  SysTime _, from_modTime, to_modTime;
-  std.file.getTimes(from.normalizedData, _, from_modTime);
-  std.file.getTimes(to.normalizedData, _, to_modTime);
-  if(from_modTime > to_modTime) {
-    copy(from, to);
-    return true;
+  if(src.isFile) {
+    // TODO Might not work if dest.isDir. Needs testing.
+    if(copyCondition(src, dest)) src.copyTo(dest);
+    return;
   }
-  return false;
+
+  // At this point we know that src must be a dir.
+  if(dest.isFile) {
+    throw new PathException(format("Since the source path is a directory, the destination must be a directory as well. Source: %s | Destination: %s", src, dest));
+  }
+
+  if(!dest.exists) {
+    dest.mkdir(false);
+  }
+
+  foreach(srcFile; src.glob("*", SpanMode.breadth).filter!(a => !a.isDir)) {
+    auto destFile = dest ~ srcFile.relativeTo(src);
+    if(!copyCondition(srcFile, destFile)) {
+      continue;
+    }
+    logDebug("Copying %s => %s", srcFile, destFile);
+    if(!destFile.exists) {
+      destFile.parent.mkdir(true);
+    }
+    srcFile.copyFileTo(destFile);
+  }
 }
+
+///
+unittest {
+}
+
+
+alias copyToIfNewer = copyTo!((src, dest){
+  import std.datetime : SysTime;
+  SysTime _, src_modTime, dest_modTime;
+  std.file.getTimes(src.normalizedData, _, src_modTime);
+  std.file.getTimes(dest.normalizedData, _, dest_modTime);
+  return src_modTime < dest_modTime;
+});
 
 
 /// Remove path from filesystem. Similar to unix `rm`. If the path is a dir, will reecursively remove all subdirs by default.
@@ -624,158 +858,4 @@ void mkdir(in Path p, bool parents = true) {
 
 ///
 unittest {
-}
-
-
-mixin template PathCommon(PathType, StringType, alias theSeparator, alias theCaseSensitivity)
-  if(isSomeString!StringType && isSomeChar!(typeof(theSeparator)))
-{
-  StringType data = ".";
-
-  ///
-  unittest {
-    assert(PathType().data != "");
-    assert(PathType("123").data == "123");
-    assert(PathType("C:///toomany//slashes!\\").data == "C:///toomany//slashes!\\");
-  }
-
-
-  /// Used to separate each path segment.
-  alias separator = theSeparator;
-
-  /// A value of std.path.CaseSensetive whether this type of path is case sensetive or not.
-  alias caseSensitivity = theCaseSensitivity;
-
-
-  /// Concatenate a path and a string, which will be treated as a path.
-  auto opBinary(string op : "~", InStringType)(auto ref in InStringType str) const
-    if(isSomeString!InStringType)
-  {
-    return this ~ PathType(str);
-  }
-
-  /// Concatenate two paths.
-  auto opBinary(string op : "~")(auto ref in PathType other) const {
-    auto p = PathType(data);
-    p ~= other;
-    return p;
-  }
-
-  /// Concatenate the path-string $(D str) to this path.
-  void opOpAssign(string op : "~", InStringType)(auto ref in InStringType str)
-    if(isSomeString!InStringType)
-  {
-    this ~= PathType(str);
-  }
-
-  /// Concatenate the path $(D other) to this path.
-  void opOpAssign(string op : "~")(auto ref in PathType other) {
-    auto l = PathType(this.normalizedData);
-    auto r = PathType(other.normalizedData);
-
-    if(l.isDot || r.isAbsolute) {
-      this.data = r.data;
-      return;
-    }
-
-    if(r.isDot) {
-      this.data = l.data;
-      return;
-    }
-
-    auto sep = "";
-    if(!l.data.endsWith('/', '\\') && !r.data.startsWith('/', '\\')) {
-      sep = [separator];
-    }
-
-    this.data = format("%s%s%s", l.data, sep, r.data);
-  }
-
-  ///
-  unittest {
-    assertEqual(PathType() ~ "hello", PathType("hello"));
-    assertEqual(PathType("") ~ "hello", PathType("hello"));
-    assertEqual(PathType(".") ~ "hello", PathType("hello"));
-    assertEqual(PosixPath("/") ~ "hello", PosixPath("/hello"));
-    assertEqual(WindowsPath("/") ~ "hello", WindowsPath(`\hello`));
-    assertEqual(PosixPath("/") ~ "hello" ~ "world", PosixPath("/hello/world"));
-    assertEqual(WindowsPath(`C:\`) ~ "hello" ~ "world", WindowsPath(`C:\hello\world`));
-  }
-
-
-  /// Equality overload.
-  bool opBinary(string op : "==")(auto ref in PathType other) const {
-    auto l = this.data.empty ? "." : this.data;
-    auto r = other.data.empty ? "." : other.data;
-    static if(theCaseSensitivity == std.path.CaseSensetive.no) {
-      return std.uni.sicmp(l, r);
-    }
-    else {
-      return std.algorithm.cmp(l, r);
-    }
-  }
-
-  ///
-  unittest {
-    auto p1 = PathType("/hello/world");
-    auto p2 = PathType("/hello/world");
-    assertEqual(p1, p2);
-  }
-
-
-  /// Cast the path to a string.
-  auto toString(OtherStringType = StringType)() const {
-    return this.data.to!OtherStringType;
-  }
-
-  ///
-  unittest {
-    assertEqual(PathType("C:/hello/world.exe.xml").to!StringType, "C:/hello/world.exe.xml");
-  }
-}
-
-
-struct WindowsPath
-{
-  mixin PathCommon!(WindowsPath, string, '\\', std.path.CaseSensitive.no);
-
-  version(Windows) {
-    /// Overload conversion `to` for Path => std.file.DirEntry.
-    auto opCast(To : std.file.DirEntry)() const {
-      return To(this.normalizedData);
-    }
-
-    ///
-    unittest {
-      auto d = cwd().to!(std.file.DirEntry);
-    }
-  }
-}
-
-
-struct PosixPath
-{
-  mixin PathCommon!(PosixPath, string, '/', std.path.CaseSensitive.yes);
-
-  version(Posix) {
-    /// Overload conversion `to` for Path => std.file.DirEntry.
-    auto opCast(To : std.file.DirEntry)() const {
-      return To(this.normalizedData);
-    }
-
-    ///
-    unittest {
-      auto d = cwd().to!(std.file.DirEntry);
-    }
-  }
-}
-
-/// Set the default path depending on the current platform.
-version(Windows)
-{
-  alias Path = WindowsPath;
-}
-else // Assume posix on non-windows platforms.
-{
-  alias Path = PosixPath;
 }
