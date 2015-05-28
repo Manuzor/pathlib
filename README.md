@@ -19,3 +19,4 @@ _+ Addition | - Removal | $ Change_
 * $ Instead of `suffix()` and `suffixes()` there are `extension()`, `extensions()`, and `fullExtension()`.
 * $ While pythons pathlib usually uses '/' as the path segment separator, we try to maintain the separator for the current type of path as much as possible.
 * $ Instead of providing `rglob()`, `glob()` accepts an optional `SpanMode` parameter. The type `SpanMode` is a public import from `std.file`.
+* + `copyFileTo()` To copy one file to some destination and `copyTo()` to copy either files or directories (not unlike `cp -r`).
