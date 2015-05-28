@@ -691,19 +691,19 @@ unittest {
 
 
 // Resolve all ".", "..", and symlinks.
-Path resolve(in Path p) {
+Path resolved(in Path p) {
   return Path(Path(std.path.absolutePath(p.data)).normalizedData);
 }
 
 ///
 unittest {
-  assertNotEqual(Path(), Path().resolve());
+  assertNotEqual(Path(), Path().resolved());
 }
 
 
 /// The absolute path to the current working directory with symlinks and friends resolved.
 Path cwd() {
-  return Path().resolve();
+  return Path().resolved();
 }
 
 ///
@@ -714,7 +714,7 @@ unittest {
 
 /// The path to the current executable.
 Path currentExePath() {
-  return Path(std.file.thisExePath()).resolve();
+  return Path(std.file.thisExePath()).resolved();
 }
 
 ///
@@ -765,7 +765,6 @@ unittest {
 /// Behaves like std.file.copy except that $(D dest) does not have to be a file.
 /// See_Also: copyTo(in Path, in Path)
 void copyFileTo(in Path src, in Path dest) {
-  logDebug("Single file copy: %s => %s.", src, dest);
   if(dest.exists && dest.isDir) {
     std.file.copy(src.normalizedData, (dest ~ src.name).normalizedData);
   }
@@ -788,25 +787,22 @@ unittest {
 ///   dest = The path to a file or a directory. If $(D src) is a directory, $(D dest) must be an existing directory.
 ///
 /// Throws: PathException
-void copyTo(alias copyCondition = (a, b){ logDebug("Condition: %s | %s", a, b); return true; })(in Path src, in Path dest) {
-  logDebug("Checking if src exists.");
+void copyTo(alias copyCondition = (a, b){ return true; })(in Path src, in Path dest) {
   if(!src.exists) {
     throw new PathException(format("The source path does not exist: %s", src));
   }
 
   if(src.isFile) {
-    logDebug("src is file.");
     if(copyCondition(src, dest)) src.copyFileTo(dest);
     return;
   }
 
-  // At this point we know that src must be a dir.
-  if(dest.isFile) {
-    throw new PathException(format("Since the source path is a directory, the destination must be a directory as well. Source: %s | Destination: %s", src, dest));
-  }
-
   if(!dest.exists) {
     dest.mkdir(false);
+  }
+  else if(dest.isFile) {
+    // At this point we know that src must be a dir.
+    throw new PathException(format("Since the source path is a directory, the destination must be a directory as well. Source: %s | Destination: %s", src, dest));
   }
 
   foreach(srcFile; src.glob("*", SpanMode.breadth).filter!(a => !a.isDir)) {
@@ -814,7 +810,6 @@ void copyTo(alias copyCondition = (a, b){ logDebug("Condition: %s | %s", a, b); 
     if(!copyCondition(srcFile, destFile)) {
       continue;
     }
-    logDebug("Copying %s => %s", srcFile, destFile);
     if(!destFile.exists) {
       destFile.parent.mkdir(true);
     }
