@@ -325,15 +325,13 @@ auto posixData(PathType)(auto ref in PathType p) {
   if(p.isDot) {
     return ".";
   }
-  auto root = p.root;
-  auto result = p.data[root.length..$].replace("\\", "/").squeeze("/");
-  if(result.length > 1 && result[$ - 1] == '/') {
-    result = result[0..$ - 1];
+  auto result = std.path.buildNormalizedPath(p.data);
+  version(Windows) {
+    return result.squeeze(`\`).replace(`\`, "/");
   }
-  while(result.endsWith("/.")) {
-    result = result[0 .. $ - 2].squeeze("/");
+  else {
+    return result.squeeze("/");
   }
-  return root ~ result;
 }
 
 ///
