@@ -708,7 +708,7 @@ unittest {
 
 /// The absolute path to the current working directory with symlinks and friends resolved.
 Path cwd() {
-  return Path().resolved();
+  return Path(std.file.getcwd());
 }
 
 ///
