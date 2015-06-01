@@ -141,6 +141,10 @@ mixin template PathCommon(PathType, StringType, alias theSeparator, alias theCas
     assertEqual(WindowsPath("/") ~ "hello", WindowsPath(`\hello`));
     assertEqual(PosixPath("/") ~ "hello" ~ "world", PosixPath("/hello/world"));
     assertEqual(WindowsPath(`C:\`) ~ "hello" ~ "world", WindowsPath(`C:\hello\world`));
+    assertEqual(PosixPath("hello") ~ "..", PosixPath("hello/.."));
+    assertEqual(WindowsPath("hello") ~ "..", WindowsPath(`hello\..`));
+    assertEqual(WindowsPath("..") ~ "hello", WindowsPath(`..\hello`));
+    assertEqual(PosixPath("..") ~ "hello", PosixPath("../hello"));
   }
 
 
@@ -226,7 +230,10 @@ else // Assume posix on non-windows platforms.
 bool isDot(StringType)(auto ref in StringType str)
   if(isSomeString!StringType)
 {
-  if(str.length && str[0] != '.') {
+  if(str.length > 0 && str[0] != '.') {
+    return false;
+  }
+  if(str.startsWith("..")) {
     return false;
   }
   auto data = str.removechars("./\\");
