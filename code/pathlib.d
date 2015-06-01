@@ -226,6 +226,41 @@ else // Assume posix on non-windows platforms.
 }
 
 
+/// Helper struct to change the directory for the current scope.
+struct ScopedChdir
+{
+  Path prevDir;
+
+  this(in Path newDir) {
+    prevDir = cwd();
+    if (newDir.isAbsolute) {
+      newDir.chdir();
+    }
+    else {
+      (cwd() ~ newDir).chdir();
+    }
+  }
+
+  /// Convenience overload that takes a string.
+  this(string newDir) {
+    this(Path(newDir));
+  }
+
+  ~this() {
+    prevDir.chdir();
+  }
+}
+
+///
+unittest {
+  auto orig = cwd();
+  with(ScopedChdir("..")) {
+    assertNotEqual(orig, cwd());
+  }
+  assertEqual(orig, cwd());
+}
+
+
 /// Whether $(D str) can be represented by ".".
 bool isDot(StringType)(auto ref in StringType str)
   if(isSomeString!StringType)
