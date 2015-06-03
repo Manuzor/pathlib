@@ -56,6 +56,12 @@ void assertNotEmpty(A, StringType = string)(A a, StringType fmt = "String `%s` s
   assert(!a.empty, format(fmt, a));
 }
 
+template isSomePath(PathType)
+{
+  enum isSomePath = is(PathType == WindowsPath) ||
+                    is(PathType == PosixPath);
+}
+
 
 /// Exception that will be thrown when any path operations fail.
 class PathException : Exception
@@ -96,7 +102,9 @@ mixin template PathCommon(PathType, StringType, alias theSeparator, alias theCas
   }
 
   /// Concatenate two paths.
-  auto opBinary(string op : "~")(auto ref in PathType other) const {
+  auto opBinary(string op : "~")(auto ref in PathType other) const
+    if(isSomePath!PathType)
+  {
     auto p = PathType(data);
     p ~= other;
     return p;
@@ -110,7 +118,9 @@ mixin template PathCommon(PathType, StringType, alias theSeparator, alias theCas
   }
 
   /// Concatenate the path $(D other) to this path.
-  void opOpAssign(string op : "~")(auto ref in PathType other) {
+  void opOpAssign(string op : "~")(auto ref in PathType other)
+    if(isSomePath!PathType)
+  {
     auto l = PathType(this.normalizedData);
     auto r = PathType(other.normalizedData);
 
@@ -149,7 +159,9 @@ mixin template PathCommon(PathType, StringType, alias theSeparator, alias theCas
 
 
   /// Equality overload.
-  bool opBinary(string op : "==")(auto ref in PathType other) const {
+  bool opBinary(string op : "==")(auto ref in PathType other) const
+    if(isSomePath!PathType)
+  {
     auto l = this.data.empty ? "." : this.data;
     auto r = other.data.empty ? "." : other.data;
     static if(theCaseSensitivity == std.path.CaseSensetive.no) {
@@ -233,7 +245,7 @@ struct ScopedChdir
 
   this(in Path newDir) {
     prevDir = cwd();
-    if (newDir.isAbsolute) {
+    if(newDir.isAbsolute) {
       newDir.chdir();
     }
     else {
@@ -290,7 +302,7 @@ unittest {
 
 /// Whether the path is either "" or ".".
 auto isDot(PathType)(auto ref in PathType p)
-  if(!isSomeString!PathType)
+  if(isSomePath!PathType)
 {
   return p.data.isDot;
 }
@@ -307,7 +319,9 @@ unittest {
 
 
 /// Returns: The root of the path $(D p).
-auto root(PathType)(auto ref in PathType p) {
+auto root(PathType)(auto ref in PathType p)
+  if(isSomePath!PathType)
+{
   auto data = p.data;
 
   static if(is(PathType == WindowsPath))
@@ -339,7 +353,9 @@ unittest {
 
 /// The drive of the path $(D p).
 /// Note: Non-Windows platforms have no concept of "drives".
-auto drive(PathType)(auto ref in PathType p) {
+auto drive(PathType)(auto ref in PathType p)
+  if(isSomePath!PathType)
+{
   static if(is(PathType == WindowsPath))
   {
     auto data = p.data;
@@ -363,7 +379,9 @@ unittest {
 
 
 /// Returns: The path data using forward slashes, regardless of the current platform.
-auto posixData(PathType)(auto ref in PathType p) {
+auto posixData(PathType)(auto ref in PathType p)
+  if(isSomePath!PathType)
+{
   if(p.isDot) {
     return ".";
   }
@@ -396,7 +414,9 @@ unittest {
 
 
 /// Returns: The path data using backward slashes, regardless of the current platform.
-auto windowsData(PathType)(auto ref in PathType p) {
+auto windowsData(PathType)(auto ref in PathType p)
+  if(isSomePath!PathType)
+{
   return p.posixData.replace("/", `\`);
 }
 
@@ -418,7 +438,7 @@ unittest {
 
 /// Will call either posixData or windowsData, according to PathType.
 auto normalizedData(PathType)(auto ref in PathType p)
-  if(is(PathType == PosixPath) || is(PathType == WindowsPath))
+  if(isSomePath!PathType)
 {
   static if(is(PathType == PosixPath)) {
     return p.posixData;
@@ -426,31 +446,42 @@ auto normalizedData(PathType)(auto ref in PathType p)
   else static if(is(PathType == WindowsPath)) {
     return p.windowsData;
   }
+  else static assert(0, "Unknown PathType.");
 }
 
 
-auto asPosixPath(PathType)(auto ref in PathType p) {
+auto asPosixPath(PathType)(auto ref in PathType p)
+  if(isSomePath!PathType)
+{
   return PathType(p.posixData);
 }
 
-auto asWindowsPath(PathType)(auto ref in PathType p) {
+auto asWindowsPath(PathType)(auto ref in PathType p)
+  if(isSomePath!PathType)
+{
   return PathType(p.windowsData);
 }
 
-auto asNormalizedPath(PathType)(auto ref in PathType p) {
+auto asNormalizedPath(PathType)(auto ref in PathType p)
+  if(isSomePath!PathType)
+{
   return PathType(p.normalizedData);
 }
 
 
 /// Whether the path is absolute.
-auto isAbsolute(PathType)(auto ref in PathType p) {
+auto isAbsolute(PathType)(auto ref in PathType p)
+  if(isSomePath!PathType)
+{
   // Ifthe path has a root or a drive, it is absolute.
   return !p.root.empty || !p.drive.empty;
 }
 
 
 /// Returns: The parts of the path as an array.
-auto parts(PathType)(auto ref in PathType p) {
+auto parts(PathType)(auto ref in PathType p)
+  if(isSomePath!PathType)
+{
   string[] theParts;
   auto root = p.root;
   if(!root.empty) {
@@ -474,7 +505,9 @@ unittest {
 }
 
 
-auto parent(PathType)(auto ref in PathType p) {
+auto parent(PathType)(auto ref in PathType p)
+  if(isSomePath!PathType)
+{
   auto theParts = p.parts.map!(a => PathType(a));
   if(theParts.length > 1) {
     return theParts[0 .. $ - 1].reduce!((a, b){ return a ~ b;});
@@ -496,7 +529,9 @@ unittest {
 
 
 /// Returns: The parts of the path as an array, without the last component.
-auto parents(PathType)(auto ref in PathType p) {
+auto parents(PathType)(auto ref in PathType p)
+  if(isSomePath!PathType)
+{
   auto theParts = p.parts.map!(x => PathType(x));
   return iota(theParts.length - 1, 0, -1).map!(x => theParts.take(x).reduce!((a, b){ return a ~ b; })).array;
 }
@@ -512,7 +547,9 @@ unittest {
 
 
 /// The name of the path without any of its parents.
-auto name(PathType)(auto ref in PathType p) {
+auto name(PathType)(auto ref in PathType p)
+  if(isSomePath!PathType)
+{
   import std.algorithm : min;
 
   auto data = p.posixData;
@@ -535,7 +572,9 @@ unittest {
 /// The extension of the path including the leading dot.
 ///
 /// Examples: The extension of "hello.foo.bar.exe" is "exe".
-auto extension(PathType)(auto ref in PathType p) {
+auto extension(PathType)(auto ref in PathType p)
+  if(isSomePath!PathType)
+{
   auto data = p.name;
   auto i = data.lastIndexOf('.');
   if(i < 0) {
@@ -561,7 +600,9 @@ unittest {
 
 
 /// All extensions of the path.
-auto extensions(PathType)(auto ref in PathType p) {
+auto extensions(PathType)(auto ref in PathType p)
+  if(isSomePath!PathType)
+{
   import std.algorithm : splitter, filter;
   import std.range : dropOne;
 
@@ -587,7 +628,9 @@ unittest {
 /// The full extension of the path.
 ///
 /// Examples: The full extension of "hello.foo.bar.exe" would be "foo.bar.exe".
-auto fullExtension(PathType)(auto ref in PathType p) {
+auto fullExtension(PathType)(auto ref in PathType p)
+  if(isSomePath!PathType)
+{
   auto data = p.name;
   auto i = data.indexOf('.');
   if(i < 0) {
@@ -613,7 +656,9 @@ unittest {
 
 
 /// The name of the path without its extension.
-auto stem(PathType)(auto ref in PathType p) {
+auto stem(PathType)(auto ref in PathType p)
+  if(isSomePath!PathType)
+{
   auto data = p.name;
   auto i = data.indexOf('.');
   if(i < 0) {
@@ -639,7 +684,9 @@ unittest {
 
 
 /// Create a path from $(D p) that is relative to $(D parent).
-auto relativeTo(PathType)(in auto ref PathType p, in auto ref PathType parent) {
+auto relativeTo(PathType)(auto ref in PathType p, in auto ref PathType parent)
+  if(isSomePath!PathType)
+{
   auto ldata = p.normalizedData;
   auto rdata = parent.normalizedData;
   if(!ldata.startsWith(rdata)) {
@@ -669,7 +716,9 @@ unittest {
 
 
 /// Whether the given path matches the given glob-style pattern
-auto match(PathType, Pattern)(auto ref in PathType p, Pattern pattern) {
+auto match(PathType, Pattern)(auto ref in PathType p, Pattern pattern)
+  if(isSomePath!PathType)
+{
   import std.path : globMatch;
 
   return p.normalizedData.globMatch!(PathType.caseSensitivity)(pattern);
@@ -897,6 +946,47 @@ void mkdir(in Path p, bool parents = true) {
   else {
     std.file.mkdir(p.normalizedData);
   }
+}
+
+///
+unittest {
+}
+
+
+auto readFile(in Path p) {
+  return std.file.read(p.normalizedData);
+}
+
+///
+unittest {
+}
+
+
+///
+auto readFile(S)(in Path p)
+  if(isSomeString!S)
+{
+  return cast(S)std.file.readText!S(p.normalizedData);
+}
+
+///
+unittest {
+}
+
+
+///
+void writeFile(in Path p, const void[] buffer) {
+  std.file.write(p.normalizedData, buffer);
+}
+
+///
+unittest {
+}
+
+
+///
+void appendFile(in Path p, in void[] buffer) {
+  std.file.append(p.normalizedData, buffer);
 }
 
 ///
