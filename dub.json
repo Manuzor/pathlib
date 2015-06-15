@@ -5,20 +5,31 @@
   "copyright": "Copyright © 2015, manuzor",
   "authors": ["manuzor"],
 
-  "targetPath": "output",
-  "targetType": "library",
+  "targetType" : "none",
 
-  "sourcePaths": ["code"],
-  "importPaths": ["code"],
-
-  "dependencies": {},
-
-  "configurations": [
+  "subPackages": [
     {
       "name": "lib",
-      "buildType": "debug",
+
       "targetName": "pathlib",
-      "targetPath": "output",
+      "targetType": "library",
+      "targetPath": "output/lib",
+
+      "sourcePaths": ["code"],
+      "importPaths": ["code"],
+
+      "buildOptions" : [ "debugInfoC" ]
+    },
+    {
+      "name": "lib64",
+
+      "targetName": "pathlib",
+      "targetType": "library",
+      "targetPath": "output/lib64",
+
+      "sourcePaths": ["code"],
+      "importPaths": ["code"],
+
       "buildOptions" : [ "debugInfoC" ]
     }
   ]
