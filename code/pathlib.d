@@ -571,7 +571,7 @@ unittest {
 
 /// The extension of the path including the leading dot.
 ///
-/// Examples: The extension of "hello.foo.bar.exe" is "exe".
+/// Examples: The extension of "hello.foo.bar.exe" is ".exe".
 auto extension(PathType)(auto ref in PathType p)
   if(isSomePath!PathType)
 {
@@ -627,7 +627,7 @@ unittest {
 
 /// The full extension of the path.
 ///
-/// Examples: The full extension of "hello.foo.bar.exe" would be "foo.bar.exe".
+/// Examples: The full extension of "hello.foo.bar.exe" would be ".foo.bar.exe".
 auto fullExtension(PathType)(auto ref in PathType p)
   if(isSomePath!PathType)
 {
