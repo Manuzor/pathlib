@@ -478,6 +478,16 @@ auto isAbsolute(PathType)(auto ref in PathType p)
 }
 
 
+auto absolute(PathType)(auto ref in PathType p, lazy auto ref in PathType parent = cwd())
+{
+  if(p.isAbsolute) {
+    return p;
+  }
+
+  return parent ~ p;
+}
+
+
 /// Returns: The parts of the path as an array.
 auto parts(PathType)(auto ref in PathType p)
   if(isSomePath!PathType)
@@ -821,12 +831,9 @@ unittest {
 }
 
 
-/// Generate an array of Paths that match the given pattern in and beneath the given path.
+/// Generate an input range of Paths that match the given pattern.
 auto glob(PatternType)(auto ref in Path p, PatternType pattern, SpanMode spanMode = SpanMode.shallow) {
-  import std.algorithm : filter;
-
-  return std.file.dirEntries(p.normalizedData, pattern, spanMode)
-         .map!(a => Path(a.name));
+  return std.file.dirEntries(p.normalizedData, pattern, spanMode).map!(a => Path(a.name));
 }
 
 ///
