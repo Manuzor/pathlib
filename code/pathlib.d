@@ -157,7 +157,7 @@ mixin template PathCommon(PathType, StringType, alias theSeparator, alias theCas
     assertEqual(PosixPath("..") ~ "hello", PosixPath("../hello"));
   }
 
-  bool opEquals()(auto ref in PathType other) const { return this.opCmp(other) == 0; }
+  bool opEquals()(auto ref in PathType other) const { return this.opCmp!()(other) == 0; }
 
   /// Equality overload.
   int opCmp()(auto ref in PathType other) const
