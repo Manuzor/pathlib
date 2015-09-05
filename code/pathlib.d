@@ -473,18 +473,23 @@ auto asNormalizedPath(PathType)(auto ref in PathType p)
 auto isAbsolute(PathType)(auto ref in PathType p)
   if(isSomePath!PathType)
 {
-  // Ifthe path has a root or a drive, it is absolute.
+  // If the path has a root or a drive, it is absolute.
   return !p.root.empty || !p.drive.empty;
 }
 
 
-auto absolute(PathType)(auto ref in PathType p, lazy auto ref in PathType parent = cwd())
+auto absolute(PathType)(auto ref in PathType p, lazy PathType parent = cwd())
 {
   if(p.isAbsolute) {
     return p;
   }
 
   return parent ~ p;
+}
+
+/// TODO
+unittest
+{
 }
 
 
