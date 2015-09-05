@@ -90,7 +90,7 @@ mixin template PathCommon(PathType, StringType, alias theSeparator, alias theCas
   /// Used to separate each path segment.
   alias separator = theSeparator;
 
-  /// A value of std.path.CaseSensetive whether this type of path is case sensetive or not.
+  /// A value of std.path.CaseSensitive whether this type of path is case sensetive or not.
   alias caseSensitivity = theCaseSensitivity;
 
 
@@ -157,14 +157,14 @@ mixin template PathCommon(PathType, StringType, alias theSeparator, alias theCas
     assertEqual(PosixPath("..") ~ "hello", PosixPath("../hello"));
   }
 
+  bool opEquals()(auto ref in PathType other) const { return this.opCmp(other) == 0; }
 
   /// Equality overload.
-  bool opBinary(string op : "==")(auto ref in PathType other) const
-    if(isSomePath!PathType)
+  int opCmp()(auto ref in PathType other) const
   {
-    auto l = this.data.empty ? "." : this.data;
-    auto r = other.data.empty ? "." : other.data;
-    static if(theCaseSensitivity == std.path.CaseSensetive.no) {
+    auto l = this.data.empty ? "." : this.normalizedData;
+    auto r = other.data.empty ? "." : other.normalizedData;
+    static if(theCaseSensitivity == std.path.CaseSensitive.no) {
       return std.uni.sicmp(l, r);
     }
     else {
@@ -174,9 +174,15 @@ mixin template PathCommon(PathType, StringType, alias theSeparator, alias theCas
 
   ///
   unittest {
+    assertEqual(PathType(""), PathType(""));
+    assertEqual(PathType("."), PathType(""));
+    assertEqual(PathType(""), PathType("."));
     auto p1 = PathType("/hello/world");
     auto p2 = PathType("/hello/world");
     assertEqual(p1, p2);
+    auto p3 = PathType("/hello/world");
+    auto p4 = PathType("/hello\\world");
+    assertEqual(p3, p4);
   }
 
 
@@ -322,22 +328,18 @@ unittest {
 auto root(PathType)(auto ref in PathType p)
   if(isSomePath!PathType)
 {
-  auto data = p.data;
-
   static if(is(PathType == WindowsPath))
   {
-    if(data.length > 1 && data[1] == ':') {
-      return data[0..2];
-    }
+    return p.drive;
   }
   else // Assume PosixPath
   {
+    auto data = p.data;
     if(data.length > 0 && data[0] == '/') {
       return data[0..1];
     }
+    return "";
   }
-
-  return "";
 }
 
 ///
@@ -473,8 +475,21 @@ auto asNormalizedPath(PathType)(auto ref in PathType p)
 auto isAbsolute(PathType)(auto ref in PathType p)
   if(isSomePath!PathType)
 {
-  // If the path has a root or a drive, it is absolute.
-  return !p.root.empty || !p.drive.empty;
+  // If the path has a root, it is absolute.
+  return !p.root.empty;
+}
+
+///
+unittest
+{
+  assert(!WindowsPath("").isAbsolute);
+  assert(!WindowsPath("/Hello/World").isAbsolute);
+  assert(WindowsPath("C:/Hello/World").isAbsolute);
+  assert(!WindowsPath("foo/bar.exe").isAbsolute);
+  assert(!PosixPath("").isAbsolute);
+  assert(PosixPath("/Hello/World").isAbsolute);
+  assert(!PosixPath("C:/Hello/World").isAbsolute);
+  assert(!PosixPath("foo/bar.exe").isAbsolute);
 }
 
 
@@ -490,6 +505,8 @@ auto absolute(PathType)(auto ref in PathType p, lazy PathType parent = cwd())
 /// TODO
 unittest
 {
+  assertEqual(WindowsPath("bar/baz.exe").absolute(WindowsPath("C:/foo")), WindowsPath("C:/foo/bar/baz.exe"));
+  assertEqual(WindowsPath("C:/foo/bar.exe").absolute(WindowsPath("C:/baz")), WindowsPath("C:/foo/bar.exe"));
 }
 
 
