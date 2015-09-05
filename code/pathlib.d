@@ -157,18 +157,24 @@ mixin template PathCommon(PathType, StringType, alias theSeparator, alias theCas
     assertEqual(PosixPath("..") ~ "hello", PosixPath("../hello"));
   }
 
-  bool opEquals()(auto ref in PathType other) const { return this.opCmp!()(other) == 0; }
-
   /// Equality overload.
-  int opCmp()(auto ref in PathType other) const
+  bool opEquals()(auto ref in PathType other) const
   {
-    auto l = this.data.empty ? "." : this.normalizedData;
-    auto r = other.data.empty ? "." : other.normalizedData;
     static if(theCaseSensitivity == std.path.CaseSensitive.no) {
-      return std.uni.sicmp(l, r);
+      return std.uni.sicmp(this.normalizedData, other.normalizedData) == 0;
     }
     else {
-      return std.algorithm.cmp(l, r);
+      return std.algorithm.cmp(this.normalizedData, other.normalizedData) == 0;
+    }
+  }
+
+  int opCmp(ref const PathType other) const
+  {
+    static if(theCaseSensitivity == std.path.CaseSensitive.no) {
+      return std.uni.sicmp(this.normalizedData, other.normalizedData);
+    }
+    else {
+      return std.algorithm.cmp(this.normalizedData, other.normalizedData);
     }
   }
 
