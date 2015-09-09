@@ -15,21 +15,20 @@ all: lib tests
 
 .PHONY: clean
 clean:
-	@echo "Cleaning all '$(OUTDIR)/*pathlib*' files ..."
-	@find $(OUTDIR)/ -type f | grep pathlib | xargs rm -f
+	rm -rf $(OUTDIR)
 
-lib: $(OUTDIR)/pathlib.lib
-tests: $(OUTDIR)/pathlibtests.exe
 runtests: tests
 	$(OUTDIR)/pathlibtests.exe
+	
 
-
+lib: $(OUTDIR)/pathlib.lib
 $(OUTDIR)/pathlib.lib: $(PATHLIB_DFILES)
 	$(eval DFLAGS = $(DFLAGSCOMMON))
 	$(eval DFLAGS += -lib)
 	$(eval DFLAGS += -od$(OUTDIR))
 	dmd $(PATHLIB_DFILES) $(DFLAGS)
 
+tests: $(OUTDIR)/pathlibtests.exe
 $(OUTDIR)/pathlibtests.exe: $(PATHLIB_DFILES)
 	$(eval DFLAGS = $(DFLAGSCOMMON))
 	$(eval DFLAGS += -unittest)
