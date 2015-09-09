@@ -1,6 +1,18 @@
+CURRENT_MAKEFILE = $(abspath $(lastword $(MAKEFILE_LIST)))
+ifneq ($(shell uname -s | grep -i cygwin),)
+  # We are in a cygwin shell.
+  ROOT = $(shell cygpath -m $(dir $(CURRENT_MAKEFILE)))
+else
+  # We are in some other shell.
+  ROOT = $(dir $(CURRENT_MAKEFILE))
+endif
+
+ifeq ($(ROOT),)
+  error "Unable to determine current working dir."
+endif
 
 ifeq ($(OUTDIR),)
-  OUTDIR = output
+  OUTDIR = $(ROOT)/output
 endif
 
 ifeq ($(DFLAGSCOMMON),)
@@ -9,6 +21,8 @@ ifeq ($(DFLAGSCOMMON),)
   DFLAGSCOMMON += -L/INCREMENTAL:NO
   DFLAGSCOMMON += -w
 endif
+
+  
 
 DFILES = $(wildcard code/*.d)
 
