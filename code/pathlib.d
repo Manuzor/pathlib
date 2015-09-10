@@ -62,6 +62,14 @@ template isSomePath(PathType)
                     is(PathType == PosixPath);
 }
 
+///
+unittest
+{
+  static assert(isSomePath!WindowsPath);
+  static assert(isSomePath!PosixPath);
+  static assert(!isSomePath!string);
+}
+
 
 /// Exception that will be thrown when any path operations fail.
 class PathException : Exception
@@ -74,13 +82,16 @@ class PathException : Exception
 }
 
 
-mixin template PathCommon(PathType, StringType, alias theSeparator, alias theCaseSensitivity)
+mixin template PathCommon(StringType, alias theSeparator, alias theCaseSensitivity)
   if(isSomeString!StringType && isSomeChar!(typeof(theSeparator)))
 {
+  alias PathType = typeof(this);
+
   StringType data = ".";
 
   ///
-  unittest {
+  unittest
+  {
     assert(PathType().data != "");
     assert(PathType("123").data == "123");
     assert(PathType("C:///toomany//slashes!\\").data == "C:///toomany//slashes!\\");
@@ -89,6 +100,7 @@ mixin template PathCommon(PathType, StringType, alias theSeparator, alias theCas
 
   /// Used to separate each path segment.
   alias separator = theSeparator;
+
 
   /// A value of std.path.CaseSensitive whether this type of path is case sensetive or not.
   alias caseSensitivity = theCaseSensitivity;
@@ -105,7 +117,7 @@ mixin template PathCommon(PathType, StringType, alias theSeparator, alias theCas
   auto opBinary(string op : "~")(auto ref in PathType other) const
     if(isSomePath!PathType)
   {
-    auto p = PathType(data);
+    auto p = PathType(this.data);
     p ~= other;
     return p;
   }
@@ -136,14 +148,15 @@ mixin template PathCommon(PathType, StringType, alias theSeparator, alias theCas
 
     auto sep = "";
     if(!l.data.endsWith('/', '\\') && !r.data.startsWith('/', '\\')) {
-      sep = [separator];
+      sep = [ separator ];
     }
 
-    this.data = format("%s%s%s", l.data, sep, r.data);
+    this.data = l.data ~ sep ~ r.data;
   }
 
   ///
-  unittest {
+  unittest
+  {
     assertEqual(PathType() ~ "hello", PathType("hello"));
     assertEqual(PathType("") ~ "hello", PathType("hello"));
     assertEqual(PathType(".") ~ "hello", PathType("hello"));
@@ -179,7 +192,8 @@ mixin template PathCommon(PathType, StringType, alias theSeparator, alias theCas
   }
 
   ///
-  unittest {
+  unittest
+  {
     assertEqual(PathType(""), PathType(""));
     assertEqual(PathType("."), PathType(""));
     assertEqual(PathType(""), PathType("."));
@@ -198,7 +212,8 @@ mixin template PathCommon(PathType, StringType, alias theSeparator, alias theCas
   }
 
   ///
-  unittest {
+  unittest
+  {
     assertEqual(PathType("C:/hello/world.exe.xml").to!StringType, "C:/hello/world.exe.xml");
   }
 }
@@ -206,16 +221,19 @@ mixin template PathCommon(PathType, StringType, alias theSeparator, alias theCas
 
 struct WindowsPath
 {
-  mixin PathCommon!(WindowsPath, string, '\\', std.path.CaseSensitive.no);
+  mixin PathCommon!(string, '\\', std.path.CaseSensitive.no);
 
-  version(Windows) {
+  version(Windows)
+  {
     /// Overload conversion `to` for Path => std.file.DirEntry.
-    auto opCast(To : std.file.DirEntry)() const {
+    auto opCast(To : std.file.DirEntry)() const
+    {
       return To(this.normalizedData);
     }
 
     ///
-    unittest {
+    unittest
+    {
       auto d = cwd().to!(std.file.DirEntry);
     }
   }
@@ -224,16 +242,19 @@ struct WindowsPath
 
 struct PosixPath
 {
-  mixin PathCommon!(PosixPath, string, '/', std.path.CaseSensitive.yes);
+  mixin PathCommon!(string, '/', std.path.CaseSensitive.yes);
 
-  version(Posix) {
+  version(Posix)
+  {
     /// Overload conversion `to` for Path => std.file.DirEntry.
-    auto opCast(To : std.file.DirEntry)() const {
+    auto opCast(To : std.file.DirEntry)() const
+    {
       return To(this.normalizedData);
     }
 
     ///
-    unittest {
+    unittest
+    {
       auto d = cwd().to!(std.file.DirEntry);
     }
   }
@@ -255,13 +276,14 @@ struct ScopedChdir
 {
   Path prevDir;
 
-  this(in Path newDir) {
-    prevDir = cwd();
+  this(in Path newDir)
+  {
+    this.prevDir = cwd();
     if(newDir.isAbsolute) {
-      newDir.chdir();
+      chdir(newDir);
     }
     else {
-      (cwd() ~ newDir).chdir();
+      chdir(cwd() ~ newDir);
     }
   }
 
@@ -271,12 +293,13 @@ struct ScopedChdir
   }
 
   ~this() {
-    prevDir.chdir();
+    chdir(this.prevDir);
   }
 }
 
 ///
-unittest {
+unittest
+{
   auto orig = cwd();
   with(ScopedChdir("..")) {
     assertNotEqual(orig, cwd());
@@ -300,7 +323,8 @@ bool isDot(StringType)(auto ref in StringType str)
 }
 
 ///
-unittest {
+unittest
+{
   assert("".isDot);
   assert(".".isDot);
   assert("./".isDot);
@@ -320,7 +344,8 @@ auto isDot(PathType)(auto ref in PathType p)
 }
 
 ///
-unittest {
+unittest
+{
   assert(WindowsPath().isDot);
   assert(WindowsPath("").isDot);
   assert(WindowsPath(".").isDot);
@@ -349,7 +374,8 @@ auto root(PathType)(auto ref in PathType p)
 }
 
 ///
-unittest {
+unittest
+{
   assertEqual(WindowsPath("").root, "");
   assertEqual(PosixPath("").root, "");
   assertEqual(WindowsPath("C:/Hello/World").root, "C:");
@@ -376,7 +402,8 @@ auto drive(PathType)(auto ref in PathType p)
 }
 
 ///
-unittest {
+unittest
+{
   assertEqual(WindowsPath("").drive, "");
   assertEqual(WindowsPath("/Hello/World").drive, "");
   assertEqual(WindowsPath("C:/Hello/World").drive, "C:");
@@ -403,7 +430,8 @@ auto posixData(PathType)(auto ref in PathType p)
 }
 
 ///
-unittest {
+unittest
+{
   assertEqual(Path().posixData, ".");
   assertEqual(Path("").posixData, ".");
   assertEqual(Path("/hello/world").posixData, "/hello/world");
@@ -429,7 +457,8 @@ auto windowsData(PathType)(auto ref in PathType p)
 }
 
 ///
-unittest {
+unittest
+{
   assertEqual(Path().windowsData, ".");
   assertEqual(Path("").windowsData, Path("").windowsData);
   assertEqual(Path("/hello/world").windowsData, `\hello\world`);
@@ -499,7 +528,7 @@ unittest
 }
 
 
-auto absolute(PathType)(auto ref in PathType p, lazy PathType parent = cwd())
+auto absolute(PathType)(auto ref in PathType p, lazy PathType parent = cwd().asNormalizedPath!PathType())
 {
   if(p.isAbsolute) {
     return p;
@@ -533,7 +562,8 @@ auto parts(PathType)(auto ref in PathType p)
 }
 
 ///
-unittest {
+unittest
+{
   assertEqual(Path().parts, ["."]);
   assertEqual(Path("./.").parts, ["."]);
   assertEqual(WindowsPath("hello/world.exe.xml").parts, ["hello", "world.exe.xml"]);
@@ -554,7 +584,8 @@ auto parent(PathType)(auto ref in PathType p)
 }
 
 ///
-unittest {
+unittest
+{
   assertEqual(Path().parent, Path());
   assertEqual(Path("IHaveNoParents").parent, Path());
   assertEqual(WindowsPath("C:/hello/world").parent, WindowsPath(`C:\hello`));
@@ -575,7 +606,8 @@ auto parents(PathType)(auto ref in PathType p)
 }
 
 ///
-unittest {
+unittest
+{
   assertEmpty(Path().parents);
   assertEqual(WindowsPath("C:/hello/world").parents, [WindowsPath(`C:\hello`), WindowsPath(`C:\`)]);
   assertEqual(WindowsPath("C:/hello/world/").parents, [WindowsPath(`C:\hello`), WindowsPath(`C:\`)]);
@@ -596,7 +628,8 @@ auto name(PathType)(auto ref in PathType p)
 }
 
 ///
-unittest {
+unittest
+{
   assertEqual(Path().name, ".");
   assertEqual(Path("").name, ".");
   assertEmpty(Path("/").name);
@@ -626,7 +659,8 @@ auto extension(PathType)(auto ref in PathType p)
 }
 
 ///
-unittest {
+unittest
+{
   assertEmpty(Path().extension);
   assertEmpty(Path("").extension);
   assertEmpty(Path("/").extension);
@@ -652,7 +686,8 @@ auto extensions(PathType)(auto ref in PathType p)
 }
 
 ///
-unittest {
+unittest
+{
   assertEmpty(Path().extensions);
   assertEmpty(Path("").extensions);
   assertEmpty(Path("/").extensions);
@@ -682,7 +717,8 @@ auto fullExtension(PathType)(auto ref in PathType p)
 }
 
 ///
-unittest {
+unittest
+{
   assertEmpty(Path().fullExtension);
   assertEmpty(Path("").fullExtension);
   assertEmpty(Path("/").fullExtension);
@@ -710,7 +746,8 @@ auto stem(PathType)(auto ref in PathType p)
 }
 
 ///
-unittest {
+unittest
+{
   assertEqual(Path().stem, ".");
   assertEqual(Path("").stem, ".");
   assertEqual(Path("/").stem, "");
@@ -740,7 +777,8 @@ auto relativeTo(PathType)(auto ref in PathType p, in auto ref PathType parent)
 }
 
 ///
-unittest {
+unittest
+{
   import std.exception : assertThrown;
 
   assertEqual(Path("C:/hello/world.exe").relativeTo(Path("C:/hello")), Path("world.exe"));
@@ -763,7 +801,8 @@ auto match(PathType, Pattern)(auto ref in PathType p, Pattern pattern)
 }
 
 ///
-unittest {
+unittest
+{
   assert(Path().match("*"));
   assert(Path("").match("*"));
   assert(Path(".").match("*"));
@@ -783,7 +822,8 @@ bool exists(in Path p) {
 }
 
 ///
-unittest {
+unittest
+{
 }
 
 
@@ -793,7 +833,8 @@ bool isDir(in Path p) {
 }
 
 ///
-unittest {
+unittest
+{
 }
 
 
@@ -803,7 +844,8 @@ bool isFile(in Path p) {
 }
 
 ///
-unittest {
+unittest
+{
 }
 
 
@@ -813,7 +855,8 @@ bool isSymlink(in Path p) {
 }
 
 ///
-unittest {
+unittest
+{
 }
 
 
@@ -823,7 +866,8 @@ Path resolved(in Path p) {
 }
 
 ///
-unittest {
+unittest
+{
   assertNotEqual(Path(), Path().resolved());
 }
 
@@ -834,7 +878,8 @@ Path cwd() {
 }
 
 ///
-unittest {
+unittest
+{
   assertNotEmpty(cwd().data);
 }
 
@@ -845,7 +890,8 @@ Path currentExePath() {
 }
 
 ///
-unittest {
+unittest
+{
   assertNotEmpty(currentExePath().data);
 }
 
@@ -855,7 +901,8 @@ void chdir(in Path p) {
 }
 
 ///
-unittest {
+unittest
+{
 }
 
 
@@ -865,7 +912,8 @@ auto glob(PatternType)(auto ref in Path p, PatternType pattern, SpanMode spanMod
 }
 
 ///
-unittest {
+unittest
+{
   assertNotEmpty(currentExePath().parent.glob("*"));
   assertNotEmpty(currentExePath().parent.glob("*", SpanMode.shallow));
   assertNotEmpty(currentExePath().parent.glob("*", SpanMode.breadth));
@@ -880,7 +928,8 @@ auto open(in Path p, in char[] openMode = "rb") {
 }
 
 ///
-unittest {
+unittest
+{
 }
 
 
@@ -898,7 +947,8 @@ void copyFileTo(in Path src, in Path dest) {
 }
 
 ///
-unittest {
+unittest
+{
 }
 
 
@@ -942,7 +992,8 @@ void copyTo(alias copyCondition = (a, b){ return true; })(in Path src, in Path d
 }
 
 ///
-unittest {
+unittest
+{
 }
 
 
@@ -969,7 +1020,8 @@ void remove(in Path p, bool recursive = true) {
 }
 
 ///
-unittest {
+unittest
+{
 }
 
 
@@ -984,7 +1036,8 @@ void mkdir(in Path p, bool parents = true) {
 }
 
 ///
-unittest {
+unittest
+{
 }
 
 
@@ -993,7 +1046,8 @@ auto readFile(in Path p) {
 }
 
 ///
-unittest {
+unittest
+{
 }
 
 
@@ -1005,7 +1059,8 @@ auto readFile(S)(in Path p)
 }
 
 ///
-unittest {
+unittest
+{
 }
 
 
@@ -1015,7 +1070,8 @@ void writeFile(in Path p, const void[] buffer) {
 }
 
 ///
-unittest {
+unittest
+{
 }
 
 
@@ -1025,5 +1081,6 @@ void appendFile(in Path p, in void[] buffer) {
 }
 
 ///
-unittest {
+unittest
+{
 }
