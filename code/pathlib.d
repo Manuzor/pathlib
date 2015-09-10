@@ -499,10 +499,10 @@ auto asWindowsPath(PathType)(auto ref in PathType p)
   return PathType(p.windowsData);
 }
 
-auto asNormalizedPath(PathType)(auto ref in PathType p)
-  if(isSomePath!PathType)
+auto asNormalizedPath(DestType = SrcType, SrcType)(auto ref in SrcType p)
+  if(isSomePath!DestType && isSomePath!SrcType)
 {
-  return PathType(p.normalizedData);
+  return DestType(p.normalizedData);
 }
 
 
