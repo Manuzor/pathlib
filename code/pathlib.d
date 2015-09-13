@@ -420,13 +420,9 @@ auto posixData(PathType)(auto ref in PathType p)
   if(p.isDot) {
     return ".";
   }
+
   auto result = std.path.buildNormalizedPath(p.data);
-  version(Windows) {
-    return result.squeeze(`\`).replace(`\`, "/");
-  }
-  else {
-    return result.squeeze("/");
-  }
+  return result.replace(`\`, "/").squeeze("/");
 }
 
 ///
@@ -551,12 +547,15 @@ auto parts(PathType)(auto ref in PathType p)
 {
   string[] theParts;
   auto root = p.root;
-  if(!root.empty) {
+  if(!root.empty)
+  {
     static if(is(PathType == WindowsPath)) {
       root ~= p.separator;
     }
+
     theParts ~= root;
   }
+
   theParts ~= p.posixData[root.length .. $].strip('/').split('/')[];
   return theParts;
 }
