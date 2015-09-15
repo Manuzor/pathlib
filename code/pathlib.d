@@ -735,13 +735,22 @@ auto name(PathType)(auto ref in PathType p)
 ///
 unittest
 {
-  assertEqual(Path().name, ".");
-  assertEqual(Path("").name, ".");
-  assertEmpty(Path("/").name);
-  assertEqual(Path("/hello").name, "hello");
-  assertEqual(Path("C:\\hello").name, "hello");
-  assertEqual(Path("C:/hello/world.exe").name, "world.exe");
-  assertEqual(Path("hello/world.foo.bar.exe").name, "world.foo.bar.exe");
+  assertEqual(WindowsPath().name, ".");
+  assertEqual(WindowsPath("").name, ".");
+  assertEmpty(WindowsPath("/").name);
+  assertEqual(WindowsPath("/hello").name, "hello");
+  assertEqual(WindowsPath("C:\\hello").name, "hello");
+  assertEqual(WindowsPath("C:/hello/world.exe").name, "world.exe");
+  assertEqual(WindowsPath("hello/world.foo.bar.exe").name, "world.foo.bar.exe");
+
+  assertEqual(PosixPath().name, ".");
+  assertEqual(PosixPath("").name, ".");
+  assertEmpty(PosixPath("/").name, "/");
+  assertEqual(PosixPath("/hello").name, "hello");
+  assertEqual(PosixPath("C:\\hello").name, "C:\\hello");
+  assertEqual(PosixPath("/foo/bar\\ baz.txt").name, "bar\\ baz.txt");
+  assertEqual(PosixPath("C:/hello/world.exe").name, "world.exe");
+  assertEqual(PosixPath("hello/world.foo.bar.exe").name, "world.foo.bar.exe");
 }
 
 
