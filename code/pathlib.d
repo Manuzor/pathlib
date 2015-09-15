@@ -12,14 +12,15 @@ public import std.file : SpanMode;
 static import std.path;
 static import std.file;
 static import std.uni;
+import std.algorithm;
 import std.array      : array, replace, replaceLast;
 import std.format     : format;
 import std.string     : split, indexOf, empty, squeeze, removechars, lastIndexOf;
 import std.conv       : to;
 import std.typecons   : Flag;
 import std.traits     : isSomeString, isSomeChar;
-import std.algorithm  : filter, equal, map, reduce, startsWith, endsWith, strip, stripRight, stripLeft, remove;
 import std.range      : iota, take, isInputRange;
+import std.typetuple;
 
 debug
 {
@@ -82,10 +83,11 @@ class PathException : Exception
 }
 
 
-mixin template PathCommon(StringType, alias theSeparator, alias theCaseSensitivity)
-  if(isSomeString!StringType && isSomeChar!(typeof(theSeparator)))
+mixin template PathCommon(TheStringType, alias theSeparator, alias theCaseSensitivity)
+  if(isSomeString!TheStringType && isSomeString!(typeof(theSeparator)))
 {
   alias PathType = typeof(this);
+  alias StringType = TheStringType;
 
   StringType data = ".";
 
@@ -136,6 +138,8 @@ mixin template PathCommon(StringType, alias theSeparator, alias theCaseSensitivi
     auto l = PathType(this.normalizedData);
     auto r = PathType(other.normalizedData);
 
+    //logDebug("~= %s: %s => %s | %s => %s", PathType.stringof, this.data, l, other.data, r);
+
     if(l.isDot || r.isAbsolute) {
       this.data = r.data;
       return;
@@ -148,7 +152,7 @@ mixin template PathCommon(StringType, alias theSeparator, alias theCaseSensitivi
 
     auto sep = "";
     if(!l.data.endsWith('/', '\\') && !r.data.startsWith('/', '\\')) {
-      sep = [ separator ];
+      sep = this.separator;
     }
 
     this.data = l.data ~ sep ~ r.data;
@@ -160,13 +164,15 @@ mixin template PathCommon(StringType, alias theSeparator, alias theCaseSensitivi
     assertEqual(PathType() ~ "hello", PathType("hello"));
     assertEqual(PathType("") ~ "hello", PathType("hello"));
     assertEqual(PathType(".") ~ "hello", PathType("hello"));
-    assertEqual(PosixPath("/") ~ "hello", PosixPath("/hello"));
-    assertEqual(WindowsPath("/") ~ "hello", WindowsPath(`\hello`));
-    assertEqual(PosixPath("/") ~ "hello" ~ "world", PosixPath("/hello/world"));
+
+    assertEqual(WindowsPath("/") ~ "hello", WindowsPath(`hello`));
     assertEqual(WindowsPath(`C:\`) ~ "hello" ~ "world", WindowsPath(`C:\hello\world`));
-    assertEqual(PosixPath("hello") ~ "..", PosixPath("hello/.."));
     assertEqual(WindowsPath("hello") ~ "..", WindowsPath(`hello\..`));
     assertEqual(WindowsPath("..") ~ "hello", WindowsPath(`..\hello`));
+
+    assertEqual(PosixPath("/") ~ "hello", PosixPath("/hello"));
+    assertEqual(PosixPath("/") ~ "hello" ~ "world", PosixPath("/hello/world"));
+    assertEqual(PosixPath("hello") ~ "..", PosixPath("hello/.."));
     assertEqual(PosixPath("..") ~ "hello", PosixPath("../hello"));
   }
 
@@ -200,7 +206,14 @@ mixin template PathCommon(StringType, alias theSeparator, alias theCaseSensitivi
     auto p1 = PathType("/hello/world");
     auto p2 = PathType("/hello/world");
     assertEqual(p1, p2);
-    auto p3 = PathType("/hello/world");
+    static if(is(PathType == WindowsPath))
+    {
+      auto p3 = PathType("/hello/world");
+    }
+    else static if(is(PathType == PosixPath))
+    {
+      auto p3 = PathType("/hello\\world");
+    }
     auto p4 = PathType("/hello\\world");
     assertEqual(p3, p4);
   }
@@ -221,7 +234,7 @@ mixin template PathCommon(StringType, alias theSeparator, alias theCaseSensitivi
 
 struct WindowsPath
 {
-  mixin PathCommon!(string, '\\', std.path.CaseSensitive.no);
+  mixin PathCommon!(string, `\`, std.path.CaseSensitive.no);
 
   version(Windows)
   {
@@ -242,7 +255,7 @@ struct WindowsPath
 
 struct PosixPath
 {
-  mixin PathCommon!(string, '/', std.path.CaseSensitive.yes);
+  mixin PathCommon!(string, "/", std.path.CaseSensitive.yes);
 
   version(Posix)
   {
@@ -349,9 +362,13 @@ unittest
   assert(WindowsPath().isDot);
   assert(WindowsPath("").isDot);
   assert(WindowsPath(".").isDot);
+  assert(!WindowsPath("/").isDot);
+  assert(!WindowsPath("hello").isDot);
   assert(PosixPath().isDot);
   assert(PosixPath("").isDot);
   assert(PosixPath(".").isDot);
+  assert(!PosixPath("/").isDot);
+  assert(!PosixPath("hello").isDot);
 }
 
 
@@ -369,6 +386,7 @@ auto root(PathType)(auto ref in PathType p)
     if(data.length > 0 && data[0] == '/') {
       return data[0..1];
     }
+
     return "";
   }
 }
@@ -417,31 +435,28 @@ unittest
 auto posixData(PathType)(auto ref in PathType p)
   if(isSomePath!PathType)
 {
-  if(p.isDot) {
-    return ".";
-  }
-
-  auto result = std.path.buildNormalizedPath(p.data);
-  return result.replace(`\`, "/").squeeze("/");
+  return normalizedDataImpl!"posix"(p);
 }
 
 ///
 unittest
 {
-  assertEqual(Path().posixData, ".");
-  assertEqual(Path("").posixData, ".");
-  assertEqual(Path("/hello/world").posixData, "/hello/world");
-  assertEqual(Path("/\\hello/\\/////world//").posixData, "/hello/world");
-  assertEqual(Path(`C:\`).posixData, "C:/");
-  assertEqual(Path(`C:\hello\`).posixData, "C:/hello");
-  assertEqual(Path(`C:\/\hello\`).posixData, "C:/hello");
-  assertEqual(Path(`C:\some windows\/path.exe.doodee`).posixData, "C:/some windows/path.exe.doodee");
-  assertEqual(Path(`C:\some windows\/path.exe.doodee\\\`).posixData, "C:/some windows/path.exe.doodee");
-  assertEqual(Path(`C:\some windows\/path.exe.doodee\\\`).posixData, Path(Path(`C:\some windows\/path.exe.doodee\\\`).posixData).data);
-  assertEqual((Path(".") ~ "hello" ~ "./" ~ "world").posixData, "hello/world");
-  assertEqual(Path("hello/.").posixData, "hello");
-  assertEqual(Path("hello/././.").posixData, "hello");
-  assertEqual(Path("hello/././/.//").posixData, "hello");
+  assertEqual(WindowsPath().posixData, ".");
+  assertEqual(WindowsPath(``).posixData, ".");
+  assertEqual(WindowsPath(`.`).posixData, ".");
+  assertEqual(WindowsPath(`..`).posixData, "..");
+  assertEqual(WindowsPath(`/foo/bar`).posixData, `foo/bar`);
+  assertEqual(WindowsPath(`/foo/bar/`).posixData, `foo/bar`);
+  assertEqual(WindowsPath(`C:\foo/bar.exe`).posixData, `C:/foo/bar.exe`);
+  assertEqual(WindowsPath(`./foo\/../\/bar/.//\/baz.exe`).posixData, `foo/../bar/baz.exe`);
+
+  assertEqual(PosixPath().posixData, `.`);
+  assertEqual(PosixPath(``).posixData, `.`);
+  assertEqual(PosixPath(`.`).posixData, `.`);
+  assertEqual(PosixPath(`..`).posixData, `..`);
+  assertEqual(PosixPath(`/foo/bar`).posixData, `/foo/bar`);
+  assertEqual(PosixPath(`/foo/bar/`).posixData, `/foo/bar`);
+  assertEqual(PosixPath(`.//foo\ bar/.//./baz.txt`).posixData, `foo\ bar/baz.txt`);
 }
 
 
@@ -449,37 +464,120 @@ unittest
 auto windowsData(PathType)(auto ref in PathType p)
   if(isSomePath!PathType)
 {
-  return p.posixData.replace("/", `\`);
+  return normalizedDataImpl!"windows"(p);
 }
 
 ///
 unittest
 {
-  assertEqual(Path().windowsData, ".");
-  assertEqual(Path("").windowsData, Path("").windowsData);
-  assertEqual(Path("/hello/world").windowsData, `\hello\world`);
-  assertEqual(Path("/\\hello/\\/////world//").windowsData, `\hello\world`);
-  assertEqual(Path(`C:\`).windowsData, `C:\`);
-  assertEqual(Path(`C:/`).windowsData, `C:\`);
-  assertEqual(Path(`C:\hello\`).windowsData, `C:\hello`);
-  assertEqual(Path(`C:\/\hello\`).windowsData, `C:\hello`);
-  assertEqual(Path(`C:\some windows\/path.exe.doodee`).windowsData, `C:\some windows\path.exe.doodee`);
-  assertEqual(Path(`C:\some windows\/path.exe.doodee\\\`).windowsData, `C:\some windows\path.exe.doodee`);
-  assertEqual(Path(`C:/some windows\/path.exe.doodee\\\`).windowsData, Path(Path(`C:\some windows\/path.exe.doodee\\\`).windowsData).data);
+  assertEqual(WindowsPath().windowsData, `.`);
+  assertEqual(WindowsPath(``).windowsData, `.`);
+  assertEqual(WindowsPath(`.`).windowsData, `.`);
+  assertEqual(WindowsPath(`..`).windowsData, `..`);
+  assertEqual(WindowsPath(`C:\foo\bar.exe`).windowsData, `C:\foo\bar.exe`);
+  assertEqual(WindowsPath(`C:\foo\bar\`).windowsData, `C:\foo\bar`);
+  assertEqual(WindowsPath(`C:\./foo\.\\.\\\bar\`).windowsData, `C:\foo\bar`);
+  assertEqual(WindowsPath(`C:\./foo\..\\.\\\bar\//baz.exe`).windowsData, `C:\foo\..\bar\baz.exe`);
+
+  assertEqual(PosixPath().windowsData, `.`);
+  assertEqual(PosixPath(``).windowsData, `.`);
+  assertEqual(PosixPath(`.`).windowsData, `.`);
+  assertEqual(PosixPath(`..`).windowsData, `..`);
+  assertEqual(PosixPath(`/foo/bar.txt`).windowsData, `foo\bar.txt`);
+  assertEqual(PosixPath(`/foo/bar\`).windowsData, `foo\bar`);
+  assertEqual(PosixPath(`/foo/bar\`).windowsData, `foo\bar`);
+  assertEqual(PosixPath(`/./\\foo/\/.\..\bar/./baz.txt`).windowsData, `foo\..\bar\baz.txt`);
 }
 
 
-/// Will call either posixData or windowsData, according to PathType.
+/// Remove duplicate directory separators and stand-alone dots, on a textual basis.
+/// Does not resolve ".."s in paths, since this would be wrong when dealing with symlinks.
+/// Given the symlink "/foo" pointing to "/what/ever", the path "/foo/../baz.exe" would 'physically' be "/what/baz.exe".
+/// If "/foo" was no symlink, the actual path would be "/baz.exe".
+///
+/// If you need to resolve ".."s and symlinks, see resolved().
 auto normalizedData(PathType)(auto ref in PathType p)
-  if(isSomePath!PathType)
+  if(allSatisfy!(isSomePath, PathType))
 {
-  static if(is(PathType == PosixPath)) {
-    return p.posixData;
-  }
-  else static if(is(PathType == WindowsPath)) {
+  static if(is(PathType == WindowsPath))
+  {
     return p.windowsData;
   }
-  else static assert(0, "Unknown PathType.");
+  else static if(is(PathType == PosixPath))
+  {
+    return p.posixData;
+  }
+}
+
+private auto normalizedDataImpl(alias target, PathType)(in PathType p)
+{
+  static assert(target == "posix" || target == "windows");
+
+  if(p.isDot) {
+    return ".";
+  }
+
+  static if(target == "windows")
+  {
+    auto sep = WindowsPath.separator;
+  }
+  else static if(target == "posix")
+  {
+    auto sep = PosixPath.separator;
+  }
+
+  // Note: We cannot make use of std.path.buildNormalizedPath because it textually resolves ".."s in paths.
+  static if(is(PathType == WindowsPath))
+  {
+    //logDebug("WindowsPath 1: %s", p.data);
+    //logDebug("WindowsPath 2: %s", p.data.replace(WindowsPath.separator, PosixPath.separator));
+    //logDebug("WindowsPath 3: %s", p.data.replace(WindowsPath.separator, PosixPath.separator)
+    //                                    .split(PosixPath.separator));
+    //logDebug("WindowsPath 4: %s", p.data.replace(WindowsPath.separator, PosixPath.separator)
+    //                                    .split(PosixPath.separator)
+    //                                    .filter!(a => !a.empty && !a.isDot));
+    //logDebug("WindowsPath 5: %s", p.data.replace(WindowsPath.separator, PosixPath.separator)
+    //                                    .split(PosixPath.separator)
+    //                                    .filter!(a => !a.empty && !a.isDot)
+    //                                    .joiner(sep));
+
+    // For WindowsPaths, replace "\" with "/".
+    return p.data.replace(WindowsPath.separator, PosixPath.separator)
+                 .split(PosixPath.separator)
+                 .filter!(a => !a.empty && !a.isDot)
+                 .joiner(sep)
+                 .to!string();
+  }
+  else static if(is(PathType == PosixPath))
+  {
+    // For PosixPaths, do not replace any "\"s and make sure to append the root as prefix,
+    // since it would get `split` away.
+
+    static if(target == "windows")
+    {
+      return WindowsPath(p.data).windowsData;
+    }
+    else static if(target == "posix")
+    {
+      auto root = p.root;
+
+      //logDebug("PosixPath root: %s", root);
+      //logDebug("PosixPath 1: %s", root ~ p.data);
+      //logDebug("PosixPath 2: %s", root ~ p.data.split(PosixPath.separator));
+      //logDebug("PosixPath 3: %s", root ~ p.data.split(PosixPath.separator)
+      //                                           .filter!(a => !a.empty && !a.isDot)
+      //                                           .to!string);
+      //logDebug("PosixPath 4: %s", root ~ p.data.split(PosixPath.separator)
+      //                                           .filter!(a => !a.empty && !a.isDot)
+      //                                           .joiner(sep)
+      //                                           .to!string);
+
+      return root ~ p.data.split(PosixPath.separator)
+                          .filter!(a => !a.empty && !a.isDot)
+                          .joiner(sep)
+                          .to!string();
+    }
+  }
 }
 
 
@@ -545,19 +643,16 @@ unittest
 auto parts(PathType)(auto ref in PathType p)
   if(isSomePath!PathType)
 {
-  string[] theParts;
-  auto root = p.root;
-  if(!root.empty)
+  static if(is(PathType == WindowsPath))
   {
-    static if(is(PathType == WindowsPath)) {
-      root ~= p.separator;
-    }
-
-    theParts ~= root;
+    auto prefix = "";
   }
-
-  theParts ~= p.posixData[root.length .. $].strip('/').split('/')[];
-  return theParts;
+  else static if(is(PathType == PosixPath))
+  {
+    auto prefix = p.root;
+  }
+  auto theSplit = p.normalizedData.split(PathType.separator);
+  return (prefix ~ theSplit).filter!(a => !a.empty);
 }
 
 ///
@@ -565,17 +660,21 @@ unittest
 {
   assertEqual(Path().parts, ["."]);
   assertEqual(Path("./.").parts, ["."]);
-  assertEqual(WindowsPath("hello/world.exe.xml").parts, ["hello", "world.exe.xml"]);
-  assertEqual(WindowsPath("C:/hello/world.exe.xml").parts, [`C:\`, "hello", "world.exe.xml"]);
+
+  assertEqual(WindowsPath("C:/hello/world").parts, ["C:", "hello", "world"]);
+  assertEqual(WindowsPath(`hello/.\world.exe.xml`).parts, ["hello", "world.exe.xml"]);
+  assertEqual(WindowsPath("C:/hello/world.exe.xml").parts, ["C:", "hello", "world.exe.xml"]);
+
   assertEqual(PosixPath("hello/world.exe.xml").parts, ["hello", "world.exe.xml"]);
-  assertEqual(PosixPath("/hello/world.exe.xml").parts, ["/", "hello", "world.exe.xml"]);
+  assertEqual(PosixPath("/hello/.//world.exe.xml").parts, ["/", "hello", "world.exe.xml"]);
+  assertEqual(PosixPath("/hello\\ world.exe.xml").parts, ["/", "hello\\ world.exe.xml"]);
 }
 
 
 auto parent(PathType)(auto ref in PathType p)
   if(isSomePath!PathType)
 {
-  auto theParts = p.parts.map!(a => PathType(a));
+  auto theParts = p.parts.map!(a => PathType(a)).array;
   if(theParts.length > 1) {
     return theParts[0 .. $ - 1].reduce!((a, b){ return a ~ b;});
   }
@@ -591,27 +690,34 @@ unittest
   assertEqual(WindowsPath("C:/hello/world/").parent, WindowsPath(`C:\hello`));
   assertEqual(WindowsPath("C:/hello/world.exe.foo").parent, WindowsPath(`C:\hello`));
   assertEqual(PosixPath("/hello/world").parent, PosixPath("/hello"));
-  assertEqual(PosixPath("/hello/\\/world/").parent, PosixPath("/hello"));
+  assertEqual(PosixPath("/hello/\\ world/").parent, PosixPath("/hello"));
   assertEqual(PosixPath("/hello.foo.bar/world/").parent, PosixPath("/hello.foo.bar"));
 }
 
 
-/// Returns: The parts of the path as an array, without the last component.
+/// /foo/bar/baz/hurr.durr => { Path("/foo/bar/baz"), Path("/foo/bar"), Path("/foo"), Path("/") }
 auto parents(PathType)(auto ref in PathType p)
   if(isSomePath!PathType)
 {
-  auto theParts = p.parts.map!(x => PathType(x));
-  return iota(theParts.length - 1, 0, -1).map!(x => theParts.take(x).reduce!((a, b){ return a ~ b; })).array;
+  auto theParts = p.parts.map!(x => PathType(x)).array;
+  return iota(theParts.length - 1, 0, -1).map!(x => theParts.take(x)
+                                                            .reduce!((a, b){ return a ~ b; }));
 }
 
 ///
 unittest
 {
-  assertEmpty(Path().parents);
-  assertEqual(WindowsPath("C:/hello/world").parents, [WindowsPath(`C:\hello`), WindowsPath(`C:\`)]);
-  assertEqual(WindowsPath("C:/hello/world/").parents, [WindowsPath(`C:\hello`), WindowsPath(`C:\`)]);
-  assertEqual(PosixPath("/hello/world").parents, [PosixPath("/hello"), PosixPath("/")]);
-  assertEqual(PosixPath("/hello/world/").parents, [PosixPath("/hello"), PosixPath("/")]);
+  assertEmpty(WindowsPath().parents);
+  assertEmpty(WindowsPath(".").parents);
+  assertEmpty(WindowsPath("foo.txt").parents);
+  assertEqual(WindowsPath("C:/hello/world").parents, [ WindowsPath(`C:\hello`), WindowsPath(`C:\`) ]);
+  assertEqual(WindowsPath("C:/hello/world/").parents, [ WindowsPath(`C:\hello`), WindowsPath(`C:\`) ]);
+
+  assertEmpty(PosixPath().parents);
+  assertEmpty(PosixPath(".").parents);
+  assertEmpty(PosixPath("foo.txt").parents);
+  assertEqual(PosixPath("/hello/world").parents, [ PosixPath("/hello"), PosixPath("/") ]);
+  assertEqual(PosixPath("/hello/world/").parents, [ PosixPath("/hello"), PosixPath("/") ]);
 }
 
 

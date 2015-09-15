@@ -4,6 +4,8 @@ OUTDIR = output
 DFLAGS += -m64
 DFLAGS += -gc
 DFLAGS += -w
+DFLAGS += -debug
+DFLAGS += -gs
   
 PATHLIB_CODEDIR = $(CUR_MAKEFILEDIR)code
 PATHLIB_DFILES = $(shell find code -name '*.d')
