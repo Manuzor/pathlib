@@ -15,7 +15,7 @@ static import std.uni;
 import std.algorithm;
 import std.array      : array, replace, replaceLast;
 import std.format     : format;
-import std.string     : split, indexOf, empty, squeeze, removechars, lastIndexOf;
+import std.string     : split, indexOf, empty, lastIndexOf;
 import std.conv       : to;
 import std.typecons   : Flag;
 import std.traits     : isSomeString, isSomeChar;
@@ -331,7 +331,7 @@ bool isDot(StringType)(auto ref in StringType str)
   if(str.startsWith("..")) {
     return false;
   }
-  auto data = str.removechars("./\\");
+  auto data = str.filter!(ch => !"./\\".canFind(ch));
   return data.empty;
 }
 
